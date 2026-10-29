@@ -1,0 +1,12 @@
+#!/bin/sh
+# Reject commits that skip, delete, mock away, or weaken tests.
+# See CLAUDE.md Testing: fix the implementation, not the tests.
+# The checker is stdlib-only, so any Python 3.10+ works.
+
+py=$(command -v python || command -v python3)
+if [ -z "$py" ]; then
+  echo "ERROR: pre-commit needs python to run the test integrity check." >&2
+  exit 1
+fi
+
+exec "$py" scripts/hooks/check_test_integrity.py

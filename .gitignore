@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+
+# Node (web viewer)
+node_modules/
+dist/
+
+# Large and generated data: fetched by script or rebuilt by the workflow
+data/
+results/
+renders/
+checkpoints/
+*.tif
+*.tiff
+*.img
+*.jp2
+*.ply
+*.splat
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+*.npz
+*.h5
+*.hdf5
+
+# Workflow and cluster
+.snakemake/
+logs/
+slurm-*.out
+
+# Local and editor
+.env
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code local state
+.claude/settings.local.json
+.claude/.implement-ran
+.claude/.review-ran

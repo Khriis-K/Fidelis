@@ -1,0 +1,14 @@
+#!/bin/sh
+# Reject commits with co-author trailers other than Christopher Kuizon.
+# See CLAUDE.md Git Rules: all commits authored solely by Christopher Kuizon.
+
+msg=$(cat "$1")
+
+bad=$(printf '%s\n' "$msg" | grep -iE '^Co-Authored-By:' | grep -viE 'Christopher Kuizon')
+
+if [ -n "$bad" ]; then
+  echo "ERROR: commit rejected — co-author trailer(s) found:" >&2
+  echo "$bad" >&2
+  echo "All commits must be authored solely by Christopher Kuizon (see CLAUDE.md Git Rules)." >&2
+  exit 1
+fi
