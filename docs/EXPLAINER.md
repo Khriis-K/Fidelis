@@ -26,6 +26,10 @@ A refresher for explaining Fidelis to recruiters. Plain English first, key techn
 
 <!-- Format: **Term** — plain-English meaning. *In Fidelis:* why it matters here. -->
 
+**Lander Vision System (LVS) and the CTX map** — the camera-based navigation Perseverance used at Jezero. It matched descent photos against an orbital map built from MRO's Context Camera (CTX), which is much coarser than the descent photos. *In Fidelis:* our matching map is deliberately downsampled to CTX-like resolution so the navigator faces the same sharp-photo-to-coarse-map gap as the real mission. LVS's 40 m position-knowledge target appears as a reference line on our results, but it doesn't set our threshold.
+
+**Pilot study** — a small trial run that measures each fidelity level's cost and how closely the levels track each other (their covariance). MXMCPy treats those measurements as exact and uses them to split the sample budget and to predict its own accuracy. *In Fidelis:* a pilot that's too small makes MXMCPy overconfident. Its predicted variance was off by about 100% at 10 pilot samples, even on an easy test case (MXMCPy NASA report, Table 3), and small pilots tend to bias it low (Stanley et al. 2026). Rare failures make this worse, so our pilot grows in stages until its conclusions stop changing. See `docs/research/pilot-study-sizing.md`.
+
 ## Challenges and how we solved them
 
 <!-- Format: ### Title — then: the problem, how we noticed, what we did, what it taught us. -->

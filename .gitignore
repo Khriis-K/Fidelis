@@ -31,6 +31,9 @@ checkpoints/
 *.h5
 *.hdf5
 
+# Downloaded papers (copyrighted; cite by link instead)
+docs/research/*.pdf
+
 # Workflow and cluster
 .snakemake/
 logs/
