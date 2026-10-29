@@ -14,7 +14,7 @@ Fidelis builds a photoreal, renderable model of Jezero Crater from public USGS H
 
 Failure is defined as navigation error at handoff exceeding a threshold r. Fidelis estimates a smoothed failure probability (plus mean and variance of navigation error) using three Gaussian-splat render fidelity levels and NASA Langley's MXMCPy library, comparing multifidelity Monte Carlo (MFMC), multilevel Monte Carlo (MLMC), and approximate control variates (ACV) against plain Monte Carlo at equal compute. Estimates are validated against a brute-force reference value with repeated independent trials, and predicted variance is compared with observed variance.
 
-The navigator is fine-tuned only on terrain from six other Mars regions, so Jezero is a genuinely unseen test site. Results are presented in an interactive web replay where visitors fly over the splat terrain, replay individual simulated descents, and watch landing-estimate dispersion ellipses build up, plus a short highlight video.
+The navigator is fine-tuned only on terrain from six other Mars regions, so Jezero is a genuinely unseen test site. Results are presented in an interactive web replay where visitors fly over the splat terrain, replay individual simulated descents from the descent camera's point of view with the navigator's keypoints and map matches drawn over it, and watch landing-estimate dispersion ellipses build up, plus a short highlight video.
 
 ## User Stories
 
@@ -31,6 +31,7 @@ The navigator is fine-tuned only on terrain from six other Mars regions, so Jeze
 11. As the developer, I want every simulated descent to be reproducible from its random seed, so that any individual result can be regenerated and inspected.
 12. As the developer, I want a navigator that detects ALIKED keypoints, matches them to the orbital map with LightGlue, and solves position with PnP, so that the system under test mirrors how landmark-matching TRN works.
 13. As the developer, I want the navigator to report diagnostics such as match count and inlier count alongside its position estimate, so that failures can be explained rather than just counted.
+13a. As the developer, I want a match-visualization image for any simulated descent (the descent render beside the orbital map, with keypoints and matches drawn, RANSAC inliers and rejected outliers in different colors), so that I can see why a descent failed and show the learned matcher at work.
 14. As the developer, I want to render matcher training data from meshes of six held-out training regions with known camera poses, so that training labels (ground-truth correspondences) come for free.
 15. As the developer, I want Jezero and its surroundings fully excluded from matcher training, so that the failure estimate is not inflated by data leakage.
 16. As the developer, I want to fine-tune LightGlue with ALIKED features on the training-region renders, so that the matcher learns Mars terrain in general.
@@ -56,6 +57,7 @@ The navigator is fine-tuned only on terrain from six other Mars regions, so Jeze
 35. As a visitor, I want to fly around the Jezero terrain in my browser, so that I can see the scene the simulation runs in.
 36. As a visitor on a laptop or phone, I want the terrain to stream at a level of detail my device can handle, so that the viewer stays smooth.
 37. As a visitor, I want to pick an individual simulated descent and watch it replay with the true and estimated positions shown, so that I understand what the navigator does.
+37a. As a visitor, I want to watch a descent from the lander camera's point of view, with each navigation update's keypoints and matches to the orbital map drawn over it and inliers and outliers distinguished, so that I can see the learned matcher find its position.
 38. As a visitor, I want to see landing-estimate dispersion ellipses build up over the terrain, so that I can see how navigation error spreads.
 39. As a visitor, I want to switch between precomputed scenario presets such as different sun angles and noise levels, so that I can explore how conditions affect failure without waiting for live simulation.
 40. As a visitor, I want headline numbers (failure probability with confidence bounds, estimator speedups) shown in the viewer, so that I get the result without reading the full write-up.
@@ -141,14 +143,15 @@ The navigator is fine-tuned only on terrain from six other Mars regions, so Jeze
 
 **Results format (boundary between Python and the viewer)**
 
-- A documented, versioned format containing descent trajectories, per-run records (true and estimated positions, errors, diagnostics), aggregate statistics with confidence bounds, scenario-preset metadata, and references to splat assets.
+- A documented, versioned format containing descent trajectories, per-run records (true and estimated positions, errors, diagnostics, and keypoint matches with inlier flags for replayed descents), aggregate statistics with confidence bounds, scenario-preset metadata, and references to splat assets.
 - The Python side only writes it; the viewer only reads it.
 
 **Viewer**
 
 - TypeScript and React, rendering splats with Spark (World Labs, MIT license, three.js-based, with streamed level of detail). React integration via react-three-fiber, pending verification of compatibility with Spark.
 - Replays precomputed results only; there is no live GPU backend. Scenario presets (sun angle by noise level) give interactive exploration without live simulation.
-- A short highlight video is cut from the viewer.
+- The centerpiece is the descent-camera view: the splat terrain seen from the scripted descent camera, with each navigation update's keypoints and matches to the orbital map overlaid from precomputed results, inliers and outliers distinguished, and the resulting fix shown against the true position and r. A mockup with synthetic terrain and simulated matches exists as a private Claude artifact; it fixes the look, not the data.
+- A short highlight video is cut from the viewer, built around the descent-camera view.
 
 **Languages and tooling**
 
@@ -212,11 +215,11 @@ The navigator is fine-tuned only on terrain from six other Mars regions, so Jeze
 **Milestones and definitions of done.** Each ticket should be assigned to the milestone whose definition of done it serves. Milestones are vertical slices: each one leaves a working end-to-end system.
 
 - **M1 — Smoke tests.** Mitsuba (CUDA), gsplat, LightGlue with ALIKED, and MXMCPy each run a minimal example on both the local RTX 5070 and at least one CARC GPU type, and a Snakemake workflow submits at least one job through SLURM. Any incompatibility is fixed or documented with a workaround.
-- **M2 — End-to-end plain Monte Carlo ("skateboard").** One command runs one Jezero tile through splat scene, scripted descent, pretrained matcher, and PnP to navigation error, and outputs a plain Monte Carlo failure probability with a confidence interval from a small sample.
+- **M2 — End-to-end plain Monte Carlo ("skateboard").** One command runs one Jezero tile through splat scene, scripted descent, pretrained matcher, and PnP to navigation error, and outputs a plain Monte Carlo failure probability with a confidence interval from a small sample. It also writes a match-visualization image for any chosen descent, the first showable visual of the matcher at work.
 - **M3 — Fidelity ladder and estimator comparison ("scooter").** Three fidelity levels exist with measured per-sample costs. The pilot study produces correlations, r is set from it, and MXMCPy produces MFMC, MLMC, and ACV estimates with predicted variances, compared against plain Monte Carlo at equal cost. M1–M3 together form the first showable result.
 - **M4 — Fine-tuning ("bicycle").** The matcher is fine-tuned on mesh renders of the six training regions, with no Jezero data in training, and failure probability is reported for fine-tuned versus pretrained.
 - **M5 — Lighting and validation ("motorcycle").** 4–6 sun-angle splat scenes exist; a brute-force reference value is computed; estimators are repeated within a stated GPU-hour budget; predicted versus actual variance is reported, along with failure probability versus sun angle and versus r (with the LVS 40 m reference line).
-- **M6 — Viewer and write-up ("car").** The Spark replay viewer is deployed publicly with precomputed scenario presets, plus a highlight video and a README with headline results and cited NASA sources.
+- **M6 — Viewer and write-up ("car").** The Spark replay viewer is deployed publicly with precomputed scenario presets and the descent-camera view with its match overlay, plus a highlight video and a README with headline results and cited NASA sources.
 - **M7 — Stretch.** Each item is its own ticket, started only after M6. Rough priority: selective refinement comparison against sigmoid smoothing, pendulum-swing attitude model, C++ flight-style navigation module, map/DTM error, deep ensembles, rare-event methods. Relightable splats remain future work.
 
 **Known risks to check early (M1).**

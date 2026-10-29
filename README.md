@@ -20,7 +20,7 @@ You can't test-land on Mars, so reliability has to come from thousands of simula
 4. **Navigate.** ALIKED keypoints, LightGlue matching against the orbital map, and PnP with RANSAC give a position estimate. Failure means the navigation error at handoff exceeds a threshold *r*.
 5. **Estimate efficiently.** Combine many cheap low-fidelity runs with a few expensive high-fidelity ones using NASA Langley's [MXMCPy](https://github.com/nasa/MXMCPy). Compare multifidelity Monte Carlo (MFMC), multilevel Monte Carlo (MLMC), and approximate control variates (ACV) against plain Monte Carlo at equal compute.
 6. **Prove it.** Check every estimator against a brute-force high-fidelity reference over repeated independent trials, and compare MXMCPy's predicted variance with the observed spread.
-7. **Show it.** An interactive web viewer lets visitors fly over the splat terrain, replay individual descents, and watch landing-estimate dispersion build up.
+7. **Show it.** An interactive web viewer lets visitors fly over the splat terrain, replay individual descents from the descent camera's point of view with the navigator's keypoint matches drawn live, and watch landing-estimate dispersion build up.
 
 ## Why the result should be trustworthy
 
@@ -47,11 +47,11 @@ You can't test-land on Mars, so reliability has to come from thousands of simula
 | Milestone | Delivers |
 |---|---|
 | M1: Smoke tests | Every core library runs on a local GPU and on the cluster |
-| M2: End-to-end plain Monte Carlo | One command goes from a Jezero tile to a failure probability with a confidence interval |
+| M2: End-to-end plain Monte Carlo | One command goes from a Jezero tile to a failure probability with a confidence interval, plus a match visualization for any descent |
 | M3: Fidelity ladder and estimator comparison | Three fidelity levels, a pilot study, and MFMC, MLMC, and ACV vs. plain Monte Carlo. The first showable result. |
 | M4: Fine-tuning | Fine-tuned vs. pretrained matcher failure probability |
 | M5: Lighting and validation | Multiple sun angles, brute-force reference, predicted vs. observed variance |
-| M6: Viewer and write-up | Public replay viewer, highlight video, full write-up |
+| M6: Viewer and write-up | Public replay viewer centered on the descent-camera view with live match overlay, highlight video, full write-up |
 
 ## Out of scope
 

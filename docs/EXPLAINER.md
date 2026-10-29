@@ -20,7 +20,7 @@ A refresher for explaining Fidelis to recruiters. Plain English first, key techn
 4. **Navigate.** ALIKED finds keypoints, LightGlue matches them to the orbital map, and PnP solves for position. Record how far off the estimate is.
 5. **Estimate failure.** Use MXMCPy to combine all three fidelity levels and estimate how often the error exceeds a threshold *r*.
 6. **Prove it.** Compare the result against a brute-force high-fidelity reference, repeated over many independent trials.
-7. **Show it.** A web viewer replays descents over the terrain and shows landing-estimate scatter building up.
+7. **Show it.** A web viewer replays descents over the terrain and shows landing-estimate scatter building up. The centerpiece is the lander camera's view, with the matcher's keypoints and map matches drawn live, so you can watch the network work out where it is.
 
 ## Key concepts
 
@@ -29,6 +29,10 @@ A refresher for explaining Fidelis to recruiters. Plain English first, key techn
 **Lander Vision System (LVS) and the CTX map** — the camera-based navigation Perseverance used at Jezero. It matched descent photos against an orbital map built from MRO's Context Camera (CTX), which is much coarser than the descent photos. *In Fidelis:* our matching map is deliberately downsampled to CTX-like resolution so the navigator faces the same sharp-photo-to-coarse-map gap as the real mission. LVS's 40 m position-knowledge target appears as a reference line on our results, but it doesn't set our threshold.
 
 **Pilot study** — a small trial run that measures each fidelity level's cost and how closely the levels track each other (their covariance). MXMCPy treats those measurements as exact and uses them to split the sample budget and to predict its own accuracy. *In Fidelis:* a pilot that's too small makes MXMCPy overconfident. Its predicted variance was off by about 100% at 10 pilot samples, even on an easy test case (MXMCPy NASA report, Table 3), and small pilots tend to bias it low (Stanley et al. 2026). Rare failures make this worse, so our pilot grows in stages until its conclusions stop changing. See `docs/research/pilot-study-sizing.md`.
+
+**Keypoints, matches, and RANSAC inliers** — a keypoint is a distinctive spot in an image (a crater rim, a boulder) that a neural network (ALIKED) picks out. A match pairs a keypoint in the descent photo with the same spot on the orbital map (LightGlue). Some matches are wrong, so RANSAC keeps only the group of matches that agree on one camera position. Those are the inliers, and the rest are rejected as outliers. *In Fidelis:* inlier count is the first clue to why a descent failed. Drawing matches, with inliers and outliers in different colors, is both the main debugging view and the project's headline visual.
+
+**Why failure flags correlate worse than errors** — turning a continuous error into a pass/fail flag throws information away, and a biased cheap model puts its pass/fail cutoff in a different place from the expensive one. *In Fidelis:* a synthetic prototype showed this clearly: cheap and expensive errors that tracked each other closely gave pass/fail flags that agreed much less. That is why Fidelis plans a smoothed (sigmoid) failure indicator, and why the pilot study measures correlation on the failure quantity itself. It still needs confirming on real renders.
 
 ## Challenges and how we solved them
 
