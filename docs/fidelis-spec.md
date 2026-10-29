@@ -151,6 +151,7 @@ The navigator is fine-tuned only on terrain from six other Mars regions, so Jeze
 - TypeScript and React, rendering splats with Spark (World Labs, MIT license, three.js-based, with streamed level of detail). React integration via react-three-fiber, pending verification of compatibility with Spark.
 - Replays precomputed results only; there is no live GPU backend. Scenario presets (sun angle by noise level) give interactive exploration without live simulation.
 - The centerpiece is the descent-camera view: the splat terrain seen from the scripted descent camera, with each navigation update's keypoints and matches to the orbital map overlaid from precomputed results, inliers and outliers distinguished, and the resulting fix shown against the true position and r. A mockup with synthetic terrain and simulated matches exists as a private Claude artifact; it fixes the look, not the data.
+- Showcase descents, the handful the viewer replays, are also rendered and matched at several altitudes along the scripted trajectory, so the replay shows a sequence of navigation updates, as LVS matched repeatedly during descent. These frames are viewer-only and never enter the Monte Carlo estimate, which uses the handoff image alone; their cost is a few dozen renders in total, not per sample.
 - A short highlight video is cut from the viewer, built around the descent-camera view.
 
 **Languages and tooling**
