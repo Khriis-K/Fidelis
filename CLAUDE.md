@@ -62,9 +62,21 @@ When writing or modifying code, follow these principles:
 
 ## Environment
 
-- **Python**: Only used by the hooks in `scripts/hooks/` (stdlib only), so the global `python` is fine.
+- **Python project**: managed with uv. Run everything through it (`uv run pytest`, `uv run python ...`), and add dependencies with `uv add`, never `pip install`, so `pyproject.toml` and `uv.lock` stay the source of truth. Package code lives in `src/fidelis/`; tests mirror it under `tests/` (`src/fidelis/nav/pnp.py` → `tests/nav/test_pnp.py`).
+- **Hook scripts**: `scripts/hooks/` is stdlib-only and runs on the global `python`, outside the uv environment, so hooks work before the project is installed.
 - **Shell**: Prefer PowerShell for Windows-native commands. Use Bash for POSIX scripts only.
 - **Prefer monitors over polling** — for long-running commands (builds, tests, dev servers), use the Monitor tool instead of polling loops. Monitors stream events as they happen and don't burn context re-checking.
+
+## Cluster (CARC)
+
+- **The user runs all cluster commands.** Claude has no SSH access to CARC. Claude writes the job scripts, Snakemake profiles, and the exact commands to run; the user runs them and shares the output.
+- **Workflow manager: Snakemake** with the SLURM executor plugin. One workflow, two profiles: local GPU and CARC cluster.
+- **No secrets in the repo**: no passwords, SSH keys, or Duo details. The account ID, partitions, and storage paths go in the cluster profile config.
+- **Facts live in `docs/carc.md`**: partitions, limits, GPU types, storage, and SU costs, each with its source. Check it before writing a job script, and update it when the user reports something new from the cluster.
+- **Every job passes `--account` explicitly.** The user's default account has belonged to another group before.
+- **Pin the GPU type** on any job whose timing feeds a cost measurement (and pin the memory size on A100s). Mixed GPU models make the fidelity costs meaningless.
+- **Stay under the queue cap**: the `gpu` partition allows only 100 queued jobs per user. Batch Monte Carlo samples into jobs; never submit one job per sample.
+- **Jobs tolerate flaky storage**: write outputs atomically (temp file, then rename), stage many-small-file work on `$TMPDIR`, and keep anything expensive to regenerate on `/project2`. `/scratch1` is purged whenever it's over 80% full.
 
 ## Compute & Data
 

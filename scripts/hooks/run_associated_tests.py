@@ -6,6 +6,7 @@ test file. If tests fail, exits 2 so Claude sees the output and
 can fix the implementation.
 
 Source-to-test mapping:
+    Python:     src/fidelis/dir/X.py  ->  tests/dir/test_X.py, run with uv run pytest
     TypeScript: dir/X.ts  ->  dir/__tests__/X.test.ts, else X.test.ts (co-located),
                 run with vitest from the repo root
 
@@ -23,6 +24,12 @@ from pathlib import Path
 
 # Map source file patterns to their test file locations
 MAPPINGS = [
+    # Python: src/fidelis/dir/X.py -> tests/dir/test_X.py (mirrored layout)
+    {
+        "source_pattern": r"^src/fidelis/(?P<dir>(?:.+/)?)(?P<name>[^/]+)\.py$",
+        "test_template": "tests/{dir}test_{name}.py",
+        "runner": "pytest",
+    },
     # TypeScript: dir/X.ts -> dir/__tests__/X.test.ts (components/, lib/)
     {
         "source_pattern": r"^(?P<dir>(?:.+/)?)(?P<name>[^/]+)\.(?P<ext>tsx?)$",
@@ -81,7 +88,12 @@ def _is_test_file(path: str) -> bool:
 
 def run_tests(test_path: str, runner: str) -> tuple[bool, str]:
     """Run tests and return (success, output)."""
-    if runner == "vitest":
+    if runner == "pytest":
+        uv = shutil.which("uv")
+        if not uv:
+            return False, "uv not found on PATH, so the associated tests could not run."
+        cmd = [uv, "run", "pytest", test_path]
+    elif runner == "vitest":
         # shutil.which finds npx.cmd on Windows; a bare "npx" fails without a shell.
         cmd = [shutil.which("npx"), "vitest", "run", test_path]
     else:
