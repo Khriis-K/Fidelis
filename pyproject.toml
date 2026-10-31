@@ -69,4 +69,7 @@ line-length = 120
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B"]
+select = ["E", "F", "W", "I", "UP", "B", "TID251"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"gsplat".msg = "Use fidelis.gsplat_loader.import_gsplat(); it pins gsplat's build flags and sets up MSVC."

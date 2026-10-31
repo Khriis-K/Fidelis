@@ -24,7 +24,7 @@ uv run pytest -m gpu     # the same GPU checks, as tests
 | lightglue | ALIKED + LightGlue match a synthetic texture to a warped copy | Matches agree with the known homography to within 3 px |
 | mxmcpy | MFMC and ACV allocations for three correlated toy models | Variance below plain Monte Carlo at the same cost |
 
-The first LightGlue run downloads the ALIKED and LightGlue weights (from the projects' GitHub releases) into the torch hub cache. The first gsplat import compiles its CUDA extension (about 6 minutes on the laptop) into the torch extensions cache; later imports load it in seconds.
+The first LightGlue run downloads the ALIKED and LightGlue weights (from the projects' GitHub releases) into the torch hub cache. The first gsplat GPU call compiles its CUDA extension (about 6 minutes on the laptop) into the torch extensions cache; later runs load it in seconds.
 
 On Windows, gsplat needs Visual Studio 2022 with the C++ build tools installed, but not on `PATH`: Fidelis finds it itself (see below).
 
@@ -63,7 +63,7 @@ The two PRs fix different bugs and uv installs one commit, so the fork's `fideli
 
 Two settings live in `src/fidelis/gsplat_loader.py`. Import gsplat through `import_gsplat()`, never directly:
 
-- **`BUILD_3DGUT=0`.** gsplat deletes its whole build cache whenever its build flags change, so the flags must match on every run. 3DGUT (unscented-transform projection for fisheye and rolling-shutter cameras) isn't needed for Fidelis's pinhole descent camera, and its kernels were still compiling after more than an hour each on the laptop. To enable it later, change the value and expect a full rebuild.
+- **`BUILD_3DGUT=0`.** gsplat deletes its whole build cache whenever its build flags change, so the flags must match on every run. 3DGUT (unscented-transform projection for fisheye and rolling-shutter cameras) isn't needed for Fidelis's pinhole descent camera, and its kernels were still compiling after more than an hour each on the laptop. `import_gsplat()` sets it (and gsplat's other build flags) outright, so a stray shell variable can't trigger a rebuild. To enable it later, change `BUILD_FLAGS` in `src/fidelis/gsplat_loader.py` and expect a full rebuild.
 - **MSVC environment.** On Windows, torch rewrites the extension's ninja file on *every* load and runs `where cl` to find MSVC's linker, so MSVC must be on `PATH` even when nothing needs compiling. When `cl` isn't on `PATH`, the loader asks `vswhere` for the newest Visual Studio with C++ tools and copies the environment its `vcvars64.bat` sets up. A VS developer shell works too; the loader then leaves the environment alone.
 
 Reinstalling gsplat (for example after `uv sync` changes its commit) gives its sources new timestamps, so the next import recompiles everything.
