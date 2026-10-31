@@ -75,7 +75,7 @@ LOOSE_MATCHER = re.compile(
 
 # Group 1 is the indent, the group named "name" is the test's name
 PY_TEST_HEADER = re.compile(r"(\s*)(?:async\s+)?(?:def (?=test_)|class (?=Test))(?P<name>\w+)")
-JS_TEST_HEADER = re.compile(r"""(\s*)[xf]?(?:it|test|describe)(?:\.\w+)*(?:\.each\(.*?\))?\(\s*(['"`])(?P<name>.*?)\2""")
+JS_TEST_HEADER = re.compile(r"""(\s*)[xf]?(?:it|test|describe)(?:\.\w+)*(?:\.each\(.*?\))?\(\s*(['"`])(?P<name>.*?)\2""")  # noqa: E501
 
 
 # --- Test files and their tests ------------------------------------------------

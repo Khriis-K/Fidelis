@@ -1,0 +1,72 @@
+[project]
+name = "fidelis"
+version = "0.1.0"
+description = "Gaussian-splat Mars descent simulator for multifidelity estimation of TRN failure probability"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "gsplat",
+    "lightglue",
+    "mitsuba>=3.9",
+    "mxmcpy>=1.0",
+    "numpy>=2",
+    "opencv-python>=4.10",
+    "torch>=2.15",
+    "torchvision>=0.29",
+]
+
+[project.scripts]
+fidelis-smoke = "fidelis.smoke:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["uv_build>=0.12,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv]
+required-version = ">=0.12.5"
+# Laptop (Windows) and CARC (Linux) only; keeps the lock small.
+environments = ["sys_platform == 'win32'", "sys_platform == 'linux'"]
+
+# PyPI's Windows torch is CPU-only, so torch comes from PyTorch's CUDA index on both
+# machines. cu134 matches the laptop's CUDA toolkit (13.4), which gsplat's JIT build
+# needs. See docs/environment.md.
+[tool.uv.sources]
+torch = { index = "pytorch-cu134" }
+torchvision = { index = "pytorch-cu134" }
+# Not on PyPI; uv.lock pins the commit.
+lightglue = { git = "https://github.com/cvg/LightGlue" }
+# PyPI's 1.0 calls torch.solve (removed from torch); upstream fixed it after the release.
+mxmcpy = { git = "https://github.com/nasa/MXMCPy", rev = "367c7de4c6" }
+# PyPI's 1.5.3 doesn't build with MSVC + CUDA 13. Our fork's fidelis-windows branch is
+# upstream main @ 512d366 + PR 1085 + the SH fix from PR 1055 (both unmerged). Switch to
+# an official release once those land. See docs/environment.md.
+gsplat = { git = "https://github.com/Khriis-K/gsplat", rev = "f18cca6c9fb804726e2e8f7ab44c50a533bcad54" }
+
+# Install gsplat as Python only; it JIT-compiles its CUDA code on first use instead.
+[tool.uv.extra-build-variables]
+gsplat = { BUILD_NO_CUDA = "1" }
+
+[[tool.uv.index]]
+name = "pytorch-cu134"
+url = "https://download.pytorch.org/whl/cu134"
+explicit = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "gpu: needs a CUDA GPU; excluded by default, run with `uv run pytest -m gpu`",
+]
+addopts = "-m 'not gpu'"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]

@@ -101,7 +101,7 @@ To pick an A100 size, add `--constraint=a100-40gb` or `--constraint=a100-80gb`. 
   - `/project2/irahbari_1147/ckuizon/fidelis/` holds the git clone, its `.venv`, raw USGS data, splat checkpoints, fine-tuned weights, and final results.
   - `/scratch1/ckuizon/fidelis/` holds the uv cache, intermediate renders, per-batch Monte Carlo outputs, and sweep logs.
 - `~/.bashrc` sets `UV_CACHE_DIR=/scratch1/ckuizon/fidelis/uv-cache` and `UV_LINK_MODE=copy`. The cache and the venv sit on different file systems, so uv can't hardlink between them. Copying also means a scratch purge can't break the venv.
-- uv 0.13.6 is installed at `~/.local/bin` (2026-10-28). If a shell can't find `uv`, run `source $HOME/.local/bin/env`. **Open:** `uv sync` hasn't been tested on CARC yet, because there's no `pyproject.toml` yet.
+- uv 0.13.6 is installed at `~/.local/bin` (2026-10-28). If a shell can't find `uv`, run `source $HOME/.local/bin/env`. **Open:** `uv sync` hasn't been tested on CARC yet. The lock pins torch `cu134`, which needs an NVIDIA driver from the R580 series or newer (CUDA 13 minor-version compatibility, per NVIDIA's CUDA compatibility docs); check `nvidia-smi` on a GPU node. See `docs/environment.md`.
 - The repo is cloned at `/project2/irahbari_1147/ckuizon/fidelis`. The workflow: edit locally, push, then `git pull` on CARC. If you ever commit on CARC, run `git config core.hooksPath .githooks` in the clone first.
 - To install packages or debug on the cluster, use an interactive debug node (`salloc -p debug -c 4`), not the login node. [CARC]
 - `os.cpu_count()` reports every CPU on the node, not the job's share. Use `len(os.sched_getaffinity(0))` instead. [Places]
