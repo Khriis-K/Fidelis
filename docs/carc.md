@@ -129,12 +129,12 @@ Re-run `uv sync` after any `git pull` that changes `uv.lock`. A `/scratch1` purg
 - `profiles/local`: the laptop GPU, one GPU job at a time.
 - `profiles/carc`: the SLURM executor plugin. It sets `slurm_account=irahbari_1147` and the `gpu` partition for every job, pins each GPU rule's model (`smoke` → `l40s`), loads environment modules, keeps logs of successful jobs, and caps Snakemake at 20 jobs, well under the 100-job queue cap.
 
-Two plugin behaviors drive those choices (snakemake-executor-plugin-slurm 2.8.0, from its source):
+Two plugin behaviors drive those choices (snakemake-executor-plugin-slurm 2.8.0, read from its source 2026-10-31):
 
-- **With no `slurm_account`, the plugin guesses one from your recent jobs.** On CARC that could be the other group's account, so the profile always sets it. `tests/test_workflow.py` checks every planned job.
-- **Setting `gpu_model` makes the plugin request a GPU** (`--gpus=<model>:1`) even for a rule that declares none. So the model is pinned per rule in `set-resources`, never in `default-resources`.
+- **With no `slurm_account`, the plugin guesses one from your recent jobs** (`get_account_arg` in `__init__.py`). On CARC that could be the other group's account, so the profile always sets it. `tests/test_workflow.py` checks every planned job.
+- **Setting `gpu_model` makes the plugin request a GPU** (`--gpus=<model>:1`, `set_gres_string` in `utils.py`) even for a rule that declares none. So the model is pinned per rule in `set-resources`, never in `default-resources`.
 
-Always launch through `uv run snakemake ...`. uv puts the venv on `PATH`, and SLURM jobs inherit that environment, so `fidelis-smoke` and the job-side Snakemake use the venv.
+On CARC, launch with `uv run --no-sync snakemake ...`. uv puts the venv on `PATH`, and the plugin submits with `--export=ALL` (`submit_string.py`), so jobs should inherit it and run `fidelis-smoke` and the job-side Snakemake from the venv (unverified on CARC until the first run). `--no-sync` stops uv from re-syncing the venv on the login node when `uv.lock` has changed, which would unpack multi-GB CUDA wheels there. Sync on a debug node instead (above).
 
 ## Cluster smoke test
 
@@ -146,18 +146,20 @@ From the clone on a login node:
 
 ```bash
 cd /project2/irahbari_1147/ckuizon/fidelis
-uv run snakemake --profile profiles/carc smoke
+uv run --no-sync snakemake --profile profiles/carc smoke
 ```
 
 Then the A100, after the L40S run finishes (see the gsplat note below):
 
 ```bash
-uv run snakemake --profile profiles/carc smoke --set-resources smoke:gpu_model=a100
+uv run --no-sync snakemake --profile profiles/carc smoke --set-resources smoke:gpu_model=a100
 ```
 
-`--set-resources` on the command line replaces the profile's whole `set-resources` list, which is why the profile keeps only GPU models there.
+This doesn't pin the A100 memory size (40 or 80 GB). The smoke test isn't timed, so the size doesn't matter here. Timed rules must also set the plugin's `constraint` resource (`a100-40gb` or `a100-80gb`, passed as `-C`).
 
-**Run one GPU type at a time.** gsplat compiles into one shared cache (`~/.cache/torch_extensions`), built for the GPU it compiled on. A run on another GPU type recompiles it (about 6 minutes on the laptop), and two jobs compiling at once would race on the same directory. gsplat also deletes its build directory's lock file on load, so it doesn't protect against concurrent builds.
+`--set-resources` on the command line replaces the profile's whole `set-resources` list; it doesn't merge with it. A dry run on 2026-10-31 dropped a profile entry `smoke:runtime=45` when given `--set-resources smoke:gpu_model=a100`. That's why the profile keeps only GPU models there. Once there are more GPU rules, an override has to repeat every pin it wants to keep.
+
+**Run one GPU type at a time.** gsplat compiles into one shared cache (`~/.cache/torch_extensions`), built for the GPU it compiled on. Two jobs compiling at once would race on the same directory: gsplat deletes its build directory's lock file on every load (`gsplat/cuda/build.py`, `build_and_load_gsplat`), so the lock doesn't protect concurrent builds. **Unverified:** that a run on another GPU type recompiles cleanly. torch's extension version hash ignores the GPU architecture, so it relies on ninja noticing the changed `-gencode` flags. A compile took about 6 minutes on the laptop (`docs/environment.md`). If the A100 run fails with "no kernel image is available", it loaded the L40S build. Delete `~/.cache/torch_extensions/py312_cu134/gsplat_cuda` and rerun.
 
 ### GPU types that passed
 
@@ -168,7 +170,7 @@ uv run snakemake --profile profiles/carc smoke --set-resources smoke:gpu_model=a
 
 ### CARC-specific workarounds
 
-- **gcc module.** gsplat's JIT build needs a host C++ compiler that torch 2.15 and CUDA 13 accept, and the node's default compiler may be too old. The rule loads `gcc/13.3.0` (a module CARC documents for tmux) through Snakemake's `envmodules`. Snakemake runs `module purge` first, so the job gets only what the rule lists. Unverified until the first cluster run.
+- **gcc module.** gsplat's JIT build needs a host C++ compiler that torch 2.15 and CUDA 13 accept, and the node's default compiler may be too old. The rule loads `gcc/13.3.0` (a module CARC documents for tmux) through Snakemake's `envmodules`. Snakemake 9.27.1 runs `module purge && module load ...` before the command (`snakemake/deployment/env_modules.py`), so the job gets only what the rule lists. **Risk:** the purge also unloads any module CARC loads by default. If `gcc/13.3.0` or `cuda/13.0.3` depends on one, the load fails and the whole job fails; `module spider cuda/13.0.3` lists its prerequisites. Unverified until the first cluster run.
 - **CUDA toolkit module.** gsplat needs `nvcc` from a CUDA toolkit with the same major version as torch's CUDA (13); without it gsplat prints "No CUDA toolkit found" and its check fails. CARC's newest is `cuda/13.0.3` (`module spider cuda`, 2026-10-31; the other versions go from 10.0 to 12.9), so the rule loads it. torch's `cu134` build with a 13.0 toolkit passes torch's major-version check. Whether the 13.0 headers compile gsplat cleanly is unverified until the first cluster run.
 - **Open: driver.** The `cu134` torch build needs an R580-or-newer driver. The `nvidia-smi` header in the job log shows it.
 

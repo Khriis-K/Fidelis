@@ -11,6 +11,7 @@ import yaml
 
 REPO = Path(__file__).resolve().parents[1]
 CARC_ACCOUNT = "irahbari_1147"  # docs/carc.md; the user's default account belongs to another group
+CARC_GPU_TYPES = {"l40s", "a100", "a40", "v100", "p100"}  # docs/carc.md, GPUs table
 
 
 @cache  # each dry run starts Snakemake, which takes ~10 s
@@ -56,7 +57,8 @@ def test_every_carc_gpu_job_pins_its_gpu_model():
 
     gpu_jobs = {rule: r for rule, r in jobs.items() if int(r.get("gpu", "0")) > 0}
     assert gpu_jobs, "expected at least one GPU job"
-    assert {rule: r.get("gpu_model") for rule, r in gpu_jobs.items()} == {rule: "l40s" for rule in gpu_jobs}
+    unpinned = {rule: r.get("gpu_model") for rule, r in gpu_jobs.items() if r.get("gpu_model") not in CARC_GPU_TYPES}
+    assert not unpinned, f"GPU jobs without a pinned CARC GPU type: {unpinned}"
 
 
 def test_carc_stays_under_the_gpu_partition_queue_cap():

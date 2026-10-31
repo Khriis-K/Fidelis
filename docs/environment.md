@@ -18,7 +18,7 @@ The same smoke test also runs as a Snakemake rule, which is how it runs on the c
 
 ```bash
 uv run snakemake --profile profiles/local smoke   # laptop GPU
-uv run snakemake --profile profiles/carc smoke    # CARC through SLURM; see docs/carc.md
+uv run --no-sync snakemake --profile profiles/carc smoke   # CARC through SLURM; see docs/carc.md
 ```
 
 `fidelis-smoke` prints one `PASS`/`FAIL` line per library and exits non-zero if any fail. Each check does a small piece of real work and compares the result with a known answer:
