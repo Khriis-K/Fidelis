@@ -23,6 +23,10 @@ dev = [
     "pytest>=8",
     "ruff>=0.8",
 ]
+workflow = [
+    "snakemake>=9.27.1",
+    "snakemake-executor-plugin-slurm>=2.8.0",
+]
 
 [build-system]
 requires = ["uv_build>=0.12,<0.14"]
@@ -30,6 +34,8 @@ build-backend = "uv_build"
 
 [tool.uv]
 required-version = ">=0.12.5"
+# `uv sync` installs the workflow tools (Snakemake, SLURM plugin) on both machines.
+default-groups = ["dev", "workflow"]
 # Laptop (Windows) and CARC (Linux) only; keeps the lock small.
 environments = ["sys_platform == 'win32'", "sys_platform == 'linux'"]
 

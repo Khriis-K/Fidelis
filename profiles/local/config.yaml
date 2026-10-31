@@ -1,0 +1,5 @@
+# Laptop: run jobs directly on the local GPU, one GPU job at a time.
+cores: 8
+resources:
+  - gpu=1
+printshellcmds: true

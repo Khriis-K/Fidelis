@@ -1,0 +1,23 @@
+# Fidelis workflow. Run it through uv so jobs use the project venv:
+#
+#   uv run snakemake --profile profiles/local smoke   # laptop GPU
+#   uv run snakemake --profile profiles/carc smoke    # CARC, through SLURM
+#
+# Rules declare what they need (GPUs, memory, time); the profile decides where it
+# runs: the account, partition, and pinned GPU model live in profiles/carc.
+
+
+# Every core library does real GPU work and checks it against a known answer.
+# No output file, so `snakemake smoke` reruns it every time. The PASS/FAIL lines
+# go to the console locally and to the job log on SLURM.
+rule smoke:
+    resources:
+        gpu=1,
+        cpus_per_task=4,
+        mem_mb=16000,
+        runtime=30,  # minutes; the first run compiles gsplat (~6 min on the laptop)
+    envmodules:
+        # Only loaded with --software-deployment-method env-modules (the CARC profile).
+        "gcc/13.3.0",
+    shell:
+        "nvidia-smi && fidelis-smoke"

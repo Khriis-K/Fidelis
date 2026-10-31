@@ -1,0 +1,22 @@
+# USC CARC Discovery, through the SLURM executor plugin. Facts behind these values
+# are in docs/carc.md.
+executor: slurm
+
+# The gpu partition allows 100 queued jobs per user; stay well under it.
+jobs: 20
+
+default-resources:
+  # Always explicit: without it the plugin guesses an account from recent jobs, and
+  # the user's default account belongs to another group.
+  - slurm_account=irahbari_1147
+  - slurm_partition=gpu
+
+# Pin the GPU model per rule, never in default-resources: setting gpu_model makes
+# the plugin request a GPU even for rules that declare none.
+set-resources:
+  - smoke:gpu_model=l40s
+
+software-deployment-method: env-modules
+slurm-keep-successful-logs: true
+latency-wait: 60  # shared file systems can be slow to show a job's outputs
+printshellcmds: true

@@ -14,6 +14,13 @@ uv run fidelis-smoke     # real GPU work in each core library
 uv run pytest -m gpu     # the four GPU checks as tests (MXMCPy runs in the default suite)
 ```
 
+The same smoke test also runs as a Snakemake rule, which is how it runs on the cluster:
+
+```bash
+uv run snakemake --profile profiles/local smoke   # laptop GPU
+uv run snakemake --profile profiles/carc smoke    # CARC through SLURM; see docs/carc.md
+```
+
 `fidelis-smoke` prints one `PASS`/`FAIL` line per library and exits non-zero if any fail. Each check does a small piece of real work and compares the result with a known answer:
 
 | Library | What the check does | Ground truth |
@@ -36,6 +43,7 @@ On Windows, gsplat needs Visual Studio 2022 with the C++ build tools installed, 
 - **gsplat from our fork**, [`Khriis-K/gsplat`](https://github.com/Khriis-K/gsplat/tree/fidelis-windows) branch `fidelis-windows`, commit `f18cca6`, not PyPI. See workarounds below.
 - **LightGlue from GitHub** (not on PyPI); `uv.lock` pins the commit.
 - **uv ≥ 0.12.5** (`required-version`), so the laptop (0.12.5) and CARC (0.13.6) both read the same `uv.lock`.
+- **Snakemake 9 + snakemake-executor-plugin-slurm 2**, in the `workflow` dependency group. `default-groups` makes plain `uv sync` install it.
 
 ## Workarounds
 

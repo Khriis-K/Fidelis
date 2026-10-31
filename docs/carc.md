@@ -101,10 +101,76 @@ To pick an A100 size, add `--constraint=a100-40gb` or `--constraint=a100-80gb`. 
   - `/project2/irahbari_1147/ckuizon/fidelis/` holds the git clone, its `.venv`, raw USGS data, splat checkpoints, fine-tuned weights, and final results.
   - `/scratch1/ckuizon/fidelis/` holds the uv cache, intermediate renders, per-batch Monte Carlo outputs, and sweep logs.
 - `~/.bashrc` sets `UV_CACHE_DIR=/scratch1/ckuizon/fidelis/uv-cache` and `UV_LINK_MODE=copy`. The cache and the venv sit on different file systems, so uv can't hardlink between them. Copying also means a scratch purge can't break the venv.
-- uv 0.13.6 is installed at `~/.local/bin` (2026-10-28). If a shell can't find `uv`, run `source $HOME/.local/bin/env`. **Open:** `uv sync` hasn't been tested on CARC yet. The lock pins torch `cu134`, which needs an NVIDIA driver from the R580 series or newer (CUDA 13 minor-version compatibility, per NVIDIA's CUDA compatibility docs); check `nvidia-smi` on a GPU node. See `docs/environment.md`.
+- uv 0.13.6 is installed at `~/.local/bin` (2026-10-28). If a shell can't find `uv`, run `source $HOME/.local/bin/env`. **Open:** `uv sync` hasn't been tested on CARC yet (setup steps below). The lock pins torch `cu134`, which needs an NVIDIA driver from the R580 series or newer (CUDA 13 minor-version compatibility, per NVIDIA's CUDA compatibility docs); check `nvidia-smi` on a GPU node. See `docs/environment.md`.
 - The repo is cloned at `/project2/irahbari_1147/ckuizon/fidelis`. The workflow: edit locally, push, then `git pull` on CARC. If you ever commit on CARC, run `git config core.hooksPath .githooks` in the clone first.
 - To install packages or debug on the cluster, use an interactive debug node (`salloc -p debug -c 4`), not the login node. [CARC]
 - `os.cpu_count()` reports every CPU on the node, not the job's share. Use `len(os.sched_getaffinity(0))` instead. [Places]
+
+## uv environment on CARC
+
+One-time setup, from the clone on `/project2`. The cache goes on `/scratch1` and the venv sits in the clone, per the directory layout above. Run `uv sync` on a debug node, not the login node: it unpacks multi-GB CUDA wheels, which can exceed the login node's limits.
+
+```bash
+grep -E 'UV_CACHE_DIR|UV_LINK_MODE' ~/.bashrc   # expect /scratch1/ckuizon/fidelis/uv-cache and copy
+salloc -p debug -c 4 --mem 16G --account=irahbari_1147 -t 1:00:00
+cd /project2/irahbari_1147/ckuizon/fidelis
+git pull
+uv sync                                          # dev + workflow groups: pytest, Snakemake, SLURM plugin
+uv run pytest                                    # GPU-free suite
+exit                                             # release the debug node
+```
+
+Re-run `uv sync` after any `git pull` that changes `uv.lock`. A `/scratch1` purge only costs a re-download, because `UV_LINK_MODE=copy` means the venv doesn't point into the cache.
+
+## Workflow profiles
+
+`workflow/Snakefile` declares what each rule needs (GPUs, memory, time). A profile decides where it runs:
+
+- `profiles/local`: the laptop GPU, one GPU job at a time.
+- `profiles/carc`: the SLURM executor plugin. It sets `slurm_account=irahbari_1147` and the `gpu` partition for every job, pins each GPU rule's model (`smoke` → `l40s`), loads environment modules, keeps logs of successful jobs, and caps Snakemake at 20 jobs, well under the 100-job queue cap.
+
+Two plugin behaviors drive those choices (snakemake-executor-plugin-slurm 2.8.0, from its source):
+
+- **With no `slurm_account`, the plugin guesses one from your recent jobs.** On CARC that could be the other group's account, so the profile always sets it. `tests/test_workflow.py` checks every planned job.
+- **Setting `gpu_model` makes the plugin request a GPU** (`--gpus=<model>:1`) even for a rule that declares none. So the model is pinned per rule in `set-resources`, never in `default-resources`.
+
+Always launch through `uv run snakemake ...`. uv puts the venv on `PATH`, and SLURM jobs inherit that environment, so `fidelis-smoke` and the job-side Snakemake use the venv.
+
+## Cluster smoke test
+
+The `smoke` rule runs `nvidia-smi` (driver version and GPU model) and then `fidelis-smoke` (the five library checks). It has no output file, so it runs every time it's requested. On CARC the PASS/FAIL lines land in the job log at `.snakemake/slurm_logs/rule_smoke/<jobid>.log`.
+
+Cost: the rule reserves 1 GPU, 4 CPUs, and 16 GB for at most 30 minutes, which is at most 480 SUs per run (8 + 4 + 4 SUs per minute).
+
+From the clone on a login node:
+
+```bash
+cd /project2/irahbari_1147/ckuizon/fidelis
+uv run snakemake --profile profiles/carc smoke
+```
+
+Then the A100, after the L40S run finishes (see the gsplat note below):
+
+```bash
+uv run snakemake --profile profiles/carc smoke --set-resources smoke:gpu_model=a100
+```
+
+`--set-resources` on the command line replaces the profile's whole `set-resources` list, which is why the profile keeps only GPU models there.
+
+**Run one GPU type at a time.** gsplat compiles into one shared cache (`~/.cache/torch_extensions`), built for the GPU it compiled on. A run on another GPU type recompiles it (about 6 minutes on the laptop), and two jobs compiling at once would race on the same directory. gsplat also deletes its build directory's lock file on load, so it doesn't protect against concurrent builds.
+
+### GPU types that passed
+
+| GPU type | Date | Driver | Result | Job log |
+|---|---|---|---|---|
+| `l40s` | | | **open**: not run yet | |
+| `a100` | | | **open**: not run yet | |
+
+### CARC-specific workarounds
+
+- **gcc module.** gsplat's JIT build needs a host C++ compiler that torch 2.15 and CUDA 13 accept, and the node's default compiler may be too old. The rule loads `gcc/13.3.0` (a module CARC documents for tmux) through Snakemake's `envmodules`. Snakemake runs `module purge` first, so the job gets only what the rule lists. Unverified until the first cluster run.
+- **Open: CUDA toolkit module.** gsplat needs `nvcc` from a CUDA toolkit with the same major version as torch's CUDA (13). Without it gsplat prints "No CUDA toolkit found" and its check fails. Which CUDA 13 module CARC offers is unknown until someone runs `module spider cuda`. Add it to the rule's `envmodules` before the first cluster run.
+- **Open: driver.** The `cu134` torch build needs an R580-or-newer driver. The `nvidia-smi` header in the job log shows it.
 
 ## Running the Snakemake controller
 
