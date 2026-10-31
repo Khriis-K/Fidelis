@@ -2,7 +2,7 @@
 
 How to build the Fidelis Python environment and confirm every core library works on a GPU.
 
-> **Status (dev laptop, 2026-10-30):** all five libraries pass `fidelis-smoke` on the RTX 5070, from an ordinary shell. CARC is untested.
+> **Status (dev laptop, 2026-10-30):** all five libraries pass `fidelis-smoke` on the RTX 5070, from an ordinary shell. They also pass as the Snakemake `smoke` rule under `profiles/local` (2026-10-31). CARC is untested.
 
 ## Quick start
 

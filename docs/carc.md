@@ -169,7 +169,7 @@ uv run snakemake --profile profiles/carc smoke --set-resources smoke:gpu_model=a
 ### CARC-specific workarounds
 
 - **gcc module.** gsplat's JIT build needs a host C++ compiler that torch 2.15 and CUDA 13 accept, and the node's default compiler may be too old. The rule loads `gcc/13.3.0` (a module CARC documents for tmux) through Snakemake's `envmodules`. Snakemake runs `module purge` first, so the job gets only what the rule lists. Unverified until the first cluster run.
-- **Open: CUDA toolkit module.** gsplat needs `nvcc` from a CUDA toolkit with the same major version as torch's CUDA (13). Without it gsplat prints "No CUDA toolkit found" and its check fails. Which CUDA 13 module CARC offers is unknown until someone runs `module spider cuda`. Add it to the rule's `envmodules` before the first cluster run.
+- **CUDA toolkit module.** gsplat needs `nvcc` from a CUDA toolkit with the same major version as torch's CUDA (13); without it gsplat prints "No CUDA toolkit found" and its check fails. CARC's newest is `cuda/13.0.3` (`module spider cuda`, 2026-10-31; the other versions go from 10.0 to 12.9), so the rule loads it. torch's `cu134` build with a 13.0 toolkit passes torch's major-version check. Whether the 13.0 headers compile gsplat cleanly is unverified until the first cluster run.
 - **Open: driver.** The `cu134` torch build needs an R580-or-newer driver. The `nvidia-smi` header in the job log shows it.
 
 ## Running the Snakemake controller
