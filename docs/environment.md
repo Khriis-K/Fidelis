@@ -11,7 +11,7 @@ git config core.hooksPath .githooks
 uv sync
 uv run pytest            # GPU-free suite, runs anywhere
 uv run fidelis-smoke     # real GPU work in each core library
-uv run pytest -m gpu     # the same GPU checks, as tests
+uv run pytest -m gpu     # the four GPU checks as tests (MXMCPy runs in the default suite)
 ```
 
 `fidelis-smoke` prints one `PASS`/`FAIL` line per library and exits non-zero if any fail. Each check does a small piece of real work and compares the result with a known answer:
