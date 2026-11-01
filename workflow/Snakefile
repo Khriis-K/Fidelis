@@ -18,7 +18,9 @@ rule smoke:
         runtime=30,  # minutes; the first run compiles gsplat (~6 min on the laptop)
     envmodules:
         # Only loaded with --software-deployment-method env-modules (the CARC profile).
-        "gcc/13.3.0",
+        # cuda/13.0.3 only loads after these two (`module spider cuda/13.0.3`).
+        "ver/2607",
+        "gcc/15.3.0",
         "cuda/13.0.3",  # nvcc for gsplat's JIT build; must share torch's CUDA major (13)
     shell:
         "nvidia-smi && fidelis-smoke"
