@@ -2,7 +2,7 @@
 
 A refresher for explaining Fidelis to recruiters. Plain English first, key technical terms kept.
 
-> **Status:** early development. The Python environment and a smoke test of every core library exist (`docs/environment.md`). All five pass on the dev laptop and on an L40S GPU on USC's CARC cluster, run through the same Snakemake workflow. Everything else below describes the *planned* system from `docs/fidelis-spec.md`, and nothing has been measured yet.
+> **Status:** early development. The Python environment and a smoke test of every core library exist (`docs/environment.md`). All five pass on the dev laptop and on L40S and A100 GPUs on USC's CARC cluster, run through the same Snakemake workflow. Everything else below describes the *planned* system from `docs/fidelis-spec.md`, and nothing has been measured yet.
 
 ## The two-minute pitch
 

@@ -77,7 +77,7 @@ To pick an A100 size, add `--constraint=a100-40gb` or `--constraint=a100-80gb`. 
 **Why pinning matters for Fidelis:** spec story 8 records each fidelity level's cost together with the GPU type, and MXMCPy uses those costs to split samples across fidelity levels. If jobs drift across GPU models, the costs stop being comparable and the sample split is wrong. Every timed job must pin one type, and for A100s one memory size too.
 
 - V100 has no bf16 support, so mixed precision there means fp16 with a GradScaler. [Places]
-- **Open:** which GPU type to standardize on. L40S has by far the highest FP32 rate per SU of anything listed, which suits splat rendering. We won't know until we benchmark real Fidelis renders on it, though.
+- **Open:** which GPU type to standardize on. L40S has by far the highest FP32 rate per SU of anything listed, which suits splat rendering. We won't know until we benchmark real Fidelis renders on it, though. Both L40S and A100 pass the smoke test (see "GPU types that passed"), so either is a working fallback.
 
 ## Storage [CARC]
 
@@ -163,14 +163,18 @@ This doesn't pin the A100 memory size (40 or 80 GB). The smoke test isn't timed,
 
 `--set-resources` on the command line replaces the profile's whole `set-resources` list; it doesn't merge with it. A dry run on 2026-10-31 dropped a profile entry `smoke:runtime=45` when given `--set-resources smoke:gpu_model=a100`. That's why the profile keeps only GPU models there. Once there are more GPU rules, an override has to repeat every pin it wants to keep.
 
-**Run one GPU type at a time.** gsplat compiles into one shared cache (`~/.cache/torch_extensions`), built for the GPU it compiled on. Two jobs compiling at once would race on the same directory: gsplat deletes its build directory's lock file on every load (`gsplat/cuda/build.py`, `build_and_load_gsplat`), so the lock doesn't protect concurrent builds. **Unverified:** that a run on another GPU type recompiles cleanly. torch's extension version hash ignores the GPU architecture, so it relies on ninja noticing the changed `-gencode` flags. A compile took about 6 minutes on the laptop (`docs/environment.md`). If the A100 run fails with "no kernel image is available", it loaded the L40S build. Delete `~/.cache/torch_extensions/py312_cu134/gsplat_cuda` and rerun.
+**Never pass `--default-resources` on the command line.** It replaces the profile's list the same way, and that list holds `slurm_account` and `slurm_partition`. A dry run with `--default-resources mem_mb=1000` (2026-11-01) planned `preflight` with neither, so the plugin would guess the account (see above). `tests/test_workflow.py` checks the profile, not the command line, so it can't catch this.
+
+**Run one GPU type at a time.** gsplat compiles into one shared cache (`~/.cache/torch_extensions`), built for the GPU it compiled on. Two jobs compiling at once would race on the same directory: gsplat deletes its build directory's lock file on every load (`gsplat/cuda/build.py`, `build_and_load_gsplat`), so the lock doesn't protect concurrent builds. Switching GPU type recompiles cleanly: torch's extension version hash ignores the GPU architecture, but ninja notices the changed `-gencode` flags. The A100 run right after the L40S run (job 13652238) rebuilt gsplat for sm_80 and passed, taking 4 min 23 s against 38 s for the L40S run that reused its build. The cache now holds the A100 build, so the next L40S run rebuilds too. If a run fails with "no kernel image is available", it loaded the L40S build. Delete `~/.cache/torch_extensions/py312_cu134/gsplat_cuda` and rerun.
 
 ### GPU types that passed
 
 | GPU type | Date | Driver | Result | Job log |
 |---|---|---|---|---|
 | `l40s` | 2026-11-01 | 580.159.04 | 5/5 pass (c04-02, 38 s) | job 13649053, `.snakemake/slurm_logs/rule_smoke/13649053.log` |
-| `a100` | | | **open**: not run yet | |
+| `a100` | 2026-11-01 | 580.159.04 | 5/5 pass (b02-20, A100-PCIE-40GB, 4 min 23 s including the gsplat rebuild) | job 13652238, `.snakemake/slurm_logs/rule_smoke/13652238.log` |
+
+Not run: `a40` (debug and gpu partitions; would be a third architecture, sm_86). `v100` and `p100` can't run this stack: CUDA 13 dropped Pascal and Volta (sm_60–sm_70), so torch `cu134` has no kernels for them (NVIDIA CUDA 13.0 release notes; not tried on CARC).
 
 ### CARC-specific workarounds
 
