@@ -7,12 +7,12 @@ mosaics:
   dtm:
     # HiRISE DTM mosaic, 1 m/pixel, 32-bit, 1.8 GB. doi:10.5066/P9REJ9JN
     url: https://planetarymaps.usgs.gov/mosaic/mars2020_trn/HiRISE/JEZ_hirise_soc_006_DTM_MOLAtopography_DeltaGeoid_1m_Eqc_latTs0_lon0_blend40.tif
-    # USGS publishes no checksums. Null until the first download prints one; then pin it.
-    sha256: null
+    # USGS publishes no checksums; pinned from the first download (2026-11-01).
+    sha256: 44c3819caa33922b06f7a8228534d1e32ab4087aca85144136d825c371c747d8
   ortho:
     # HiRISE orthorectified image mosaic, 0.25 m/pixel, 8-bit, 6.9 GB. doi:10.5066/P9QJDP48
     url: https://planetarymaps.usgs.gov/mosaic/mars2020_trn/HiRISE/JEZ_hirise_soc_006_orthoMosaic_25cm_Eqc_latTs0_lon0_first.tif
-    sha256: null
+    sha256: 83f3faeabc87ba54db9af278611bd070494a0b0d43757108c871c763943e80d9
 
 # Both mosaics cover this box (planetocentric, east longitude), per their USGS pages.
 # Matcher training data must stay well clear of it (spec: no Jezero leakage).
