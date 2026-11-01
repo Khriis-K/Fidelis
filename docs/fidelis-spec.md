@@ -235,7 +235,7 @@ The navigator is fine-tuned only on terrain from six other Mars regions, so Jeze
 **Open items to verify at implementation time.**
 
 - Exact HiRISE DTM product IDs for each training region.
-- CTX ground resolution and the actual LVS reference-map resolution, to set the downsampling factor for the matching map.
+- ~~CTX ground resolution and the actual LVS reference-map resolution, to set the downsampling factor for the matching map.~~ Resolved (#3): both are 6 m/pixel (Cheng, Ansar & Johnson 2021, Table 1; Malin et al. 2007), so the factor from the 0.25 m HiRISE orthoimage is 24×. Sources are recorded in `config/jezero.yaml`.
 - react-three-fiber compatibility with Spark.
 - Details of JPL's F Prime flight software framework before relying on it for the C++ stretch goal.
 

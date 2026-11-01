@@ -39,12 +39,15 @@ matching_map:
   lvs_map_resolution:
     value_m: 6.0
     source: >-
-      USGS, Mars 2020 TRN CTX Orthorectified Image Mosaic (doi:10.5066/P9GV1ND3): "This
-      product is the Lander Vision System (LVS) map that will be onboard the spacecraft",
-      generated at the CTX acquisition resolution, "approximately 6 meters per pixel".
+      Cheng, Ansar & Johnson 2021, Making an Onboard Reference Map From MRO/CTX Imagery
+      for Mars 2020 Lander Vision System, Earth and Space Science 8, doi:10.1029/2020EA001560,
+      Table 1 (LVS Reference Map Requirements): "The LVS appearance map shall be 6 m/pixel".
+      Also USGS, Mars 2020 TRN CTX Orthorectified Image Mosaic (doi:10.5066/P9GV1ND3):
+      "This product is the Lander Vision System (LVS) map".
   ctx_ground_resolution:
     value_m: 6.0
     source: >-
       Malin et al. 2007, Context Camera Investigation on board the Mars Reconnaissance
       Orbiter, JGR 112, E05S04, doi:10.1029/2006JE002808; about 6 m/pixel from MRO's
-      mapping orbit (PDS CTX instrument description).
+      mapping orbit (PDS CTX instrument description). Cheng et al. 2021, section 2.1:
+      CTX acquires "images at 6 m per pixel scale over a swath 30 km wide".
