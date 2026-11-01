@@ -22,6 +22,12 @@ import yaml
 from rasterio.transform import Affine
 
 
+def require_same_resolution(lvs_m: float, ctx_m: float) -> None:
+    """The LVS map was made at CTX's acquisition resolution; the two facts must agree."""
+    if abs(lvs_m - ctx_m) > 1e-6:
+        raise ValueError(f"LVS map resolution {lvs_m} m disagrees with CTX ground resolution {ctx_m} m")
+
+
 def downsample_factor(source_res_m: float, target_res_m: float) -> int:
     """How many source pixels fit across one target pixel; must be a whole number."""
     ratio = target_res_m / source_res_m
@@ -64,7 +70,7 @@ def build_matching_map(ortho_path: Path, target_res_m: float, dst_path: Path) ->
         profile = src.profile | {
             "width": image.shape[1],
             "height": image.shape[0],
-            "transform": src.transform * Affine.scale(factor),
+            "transform": src.transform @ Affine.scale(factor),
         }
         # Drop any internal tiling block sizes from the source; they may not fit the small map.
         for key in ("blockxsize", "blockysize", "tiled"):
@@ -93,7 +99,9 @@ def main() -> int:
     args = parser.parse_args()
 
     resolutions = yaml.safe_load(args.config.read_text())["matching_map"]
-    info = build_matching_map(args.ortho_tile, resolutions["lvs_map_resolution"]["value_m"], args.out)
+    lvs_m = resolutions["lvs_map_resolution"]["value_m"]
+    require_same_resolution(lvs_m, resolutions["ctx_ground_resolution"]["value_m"])
+    info = build_matching_map(args.ortho_tile, lvs_m, args.out)
     # The factor's provenance travels with the map.
     info["lvs_map_resolution"] = resolutions["lvs_map_resolution"]
     info["ctx_ground_resolution"] = resolutions["ctx_ground_resolution"]

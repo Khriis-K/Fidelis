@@ -3,7 +3,7 @@ import pytest
 import rasterio
 from rasterio.transform import from_origin
 
-from fidelis.terrain.matching_map import block_mean, build_matching_map, downsample_factor
+from fidelis.terrain.matching_map import block_mean, build_matching_map, downsample_factor, require_same_resolution
 
 MARS_EQC = "+proj=eqc +lat_ts=0 +lon_0=0 +R=3396190 +units=m +no_defs"
 
@@ -22,6 +22,17 @@ def test_a_target_that_is_not_a_whole_multiple_is_rejected():
 def test_a_target_finer_than_the_source_is_rejected():
     with pytest.raises(ValueError):
         downsample_factor(6.0, 0.25)
+
+
+def test_matching_ctx_and_lvs_resolutions_pass():
+    # The LVS map was built at CTX's acquisition resolution, so the two facts agree.
+    require_same_resolution(lvs_m=6.0, ctx_m=6.0)
+
+
+def test_disagreeing_ctx_and_lvs_resolutions_are_rejected():
+    # Editing one fact but not the other would silently change what the map mirrors.
+    with pytest.raises(ValueError, match="CTX"):
+        require_same_resolution(lvs_m=6.0, ctx_m=5.0)
 
 
 def test_a_zero_target_resolution_is_rejected():

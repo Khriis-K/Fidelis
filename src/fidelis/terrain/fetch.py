@@ -15,6 +15,8 @@ import urllib.request
 from pathlib import Path
 
 CHUNK = 1 << 20
+# Seconds a stalled connection may sit idle (per read, not for the whole download).
+TIMEOUT_S = 60
 
 
 def sha256_of(path: Path) -> str:
@@ -42,7 +44,7 @@ def fetch(url: str, dest: Path, sha256: str | None) -> str:
     part = dest.with_name(dest.name + ".part")
     digest = hashlib.sha256()
     try:
-        with urllib.request.urlopen(url) as response, open(part, "wb") as f:
+        with urllib.request.urlopen(url, timeout=TIMEOUT_S) as response, open(part, "wb") as f:
             while chunk := response.read(CHUNK):
                 digest.update(chunk)
                 f.write(chunk)
@@ -70,7 +72,9 @@ def main() -> int:
         print(f"NOT PINNED: {args.dest} has SHA-256 {actual}; pin it in config/jezero.yaml", file=sys.stderr)
     if args.record is not None:
         tmp = args.record.with_name(args.record.name + ".tmp")
-        tmp.write_text(f"{actual}  {args.dest.name}\n")
+        # An unpinned run checked nothing; say so where the workflow keeps its proof.
+        status = "verified" if args.sha256 else "UNPINNED"
+        tmp.write_text(f"{actual}  {args.dest.name}  {status}\n")
         tmp.replace(args.record)
     print(f"{args.dest}: SHA-256 {actual}")
     return 0
