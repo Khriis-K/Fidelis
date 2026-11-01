@@ -93,6 +93,7 @@ To pick an A100 size, add `--constraint=a100-40gb` or `--constraint=a100-80gb`. 
 - **Many small files on `/scratch1` are slow:** about 22 ms per file open in the Places project. The fix was to keep data packed and unpack it into `$TMPDIR` at job start, which raised throughput from about 400 to about 2,190 images/s. [Places]
 - **`/scratch1` dropped connections** on a few specific nodes, with `[Errno 108]` and `[Errno 5]` errors. Write atomically (temp file, then rename), retry writes, and exclude bad nodes with `--exclude` (or the `SBATCH_EXCLUDE` environment variable). Find bad nodes by adding `NodeList` to `sacct` output for failed jobs. [Places]
 - **Open:** whether `/project2` has the same small-file slowness. Places only measured `/scratch1`.
+- **Open:** whether `main` compute nodes can reach the internet. `download_mosaic` (about 8.7 GB from `planetarymaps.usgs.gov`) is routed to `main`. Check from a debug node with `curl -sI https://planetarymaps.usgs.gov/mosaic/mars2020_trn/HiRISE/ | head -1`. If it fails, download on the laptop and `rsync` the files into `data/jezero/raw/` on `/project2`. The pinned checksums still verify them there.
 
 ## Software environment
 

@@ -71,6 +71,42 @@ def test_every_carc_gpu_job_pins_its_gpu_model():
     assert not unpinned, f"GPU jobs without a pinned CARC GPU type: {unpinned}"
 
 
+JEZERO_RULES = {"download_mosaic", "jezero_tile", "jezero_matching_map"}
+
+
+@pytest.mark.parametrize("profile", ["local", "carc"])
+def test_jezero_plans_both_downloads_the_tile_and_the_matching_map(profile):
+    output = dry_run(profile, "jezero", "--forceall")
+
+    assert JEZERO_RULES <= set(planned_jobs(output))
+    assert len(re.findall(r"(?:local)?rule download_mosaic:", output)) == 2  # DTM and orthoimage
+
+
+def test_jezero_data_jobs_stay_off_the_gpu_partition():
+    # CPU-only work on the gpu partition would wait in the GPU queue and count against its cap.
+    jobs = planned_jobs(dry_run("carc", "jezero", "--forceall"))
+
+    for rule in JEZERO_RULES:
+        assert jobs[rule].get("slurm_partition") != "gpu", rule
+        assert int(jobs[rule].get("gpu", "0")) == 0, rule
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "data/jezero/raw/ortho.tif",
+        "data/jezero/raw/dtm.verified",
+        "data/jezero/tile/dtm.tif",
+        "data/jezero/tile/tile.json",
+        "data/jezero/matching_map/map.tif",
+    ],
+)
+def test_jezero_data_stays_out_of_git(path):
+    result = subprocess.run(["git", "check-ignore", "--quiet", path], cwd=REPO)
+
+    assert result.returncode == 0, f"{path} is not git-ignored"
+
+
 def test_carc_stays_under_the_gpu_partition_queue_cap():
     profile = yaml.safe_load((REPO / "profiles/carc/config.yaml").read_text())
 

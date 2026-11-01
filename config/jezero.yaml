@@ -1,0 +1,50 @@
+# The Jezero test scene, built from public USGS Mars 2020 TRN products.
+#   uv run snakemake --profile profiles/local jezero
+# Facts below were read from the USGS product pages on 2026-11-01; each says where.
+
+# Fergason et al. 2020 (LPSC 51, abstract 2020): Mars 2020 TRN flight product generation.
+mosaics:
+  dtm:
+    # HiRISE DTM mosaic, 1 m/pixel, 32-bit, 1.8 GB. doi:10.5066/P9REJ9JN
+    url: https://planetarymaps.usgs.gov/mosaic/mars2020_trn/HiRISE/JEZ_hirise_soc_006_DTM_MOLAtopography_DeltaGeoid_1m_Eqc_latTs0_lon0_blend40.tif
+    # USGS publishes no checksums. Null until the first download prints one; then pin it.
+    sha256: null
+  ortho:
+    # HiRISE orthorectified image mosaic, 0.25 m/pixel, 8-bit, 6.9 GB. doi:10.5066/P9QJDP48
+    url: https://planetarymaps.usgs.gov/mosaic/mars2020_trn/HiRISE/JEZ_hirise_soc_006_orthoMosaic_25cm_Eqc_latTs0_lon0_first.tif
+    sha256: null
+
+# Both mosaics cover this box (planetocentric, east longitude), per their USGS pages.
+# Matcher training data must stay well clear of it (spec: no Jezero leakage).
+mosaic_footprint:
+  lat_min: 18.3068
+  lat_max: 18.6693
+  lon_min: 77.2229
+  lon_max: 77.584
+
+# Spherical Mars radius of the mosaics' projection (USGS pages: "Radius A/C 3396190").
+mars_radius_m: 3396190
+
+tile:
+  # Perseverance's touchdown point, Octavia E. Butler Landing. Third-party sources give
+  # 18.4447 N, 77.4508 E; not yet checked against a JPL primary source, but it lies in
+  # the post-landing HiRISE image ESP_073912_1985 (centred 18.462 N, 77.392 E).
+  center_lon: 77.4508
+  center_lat: 18.4447
+  # Grown outward to the 6 m map grid, so the cut is slightly over 2 km.
+  size_m: 2000
+
+matching_map:
+  # The map is the orthoimage averaged down to the LVS map's resolution.
+  lvs_map_resolution:
+    value_m: 6.0
+    source: >-
+      USGS, Mars 2020 TRN CTX Orthorectified Image Mosaic (doi:10.5066/P9GV1ND3): "This
+      product is the Lander Vision System (LVS) map that will be onboard the spacecraft",
+      generated at the CTX acquisition resolution, "approximately 6 meters per pixel".
+  ctx_ground_resolution:
+    value_m: 6.0
+    source: >-
+      Malin et al. 2007, Context Camera Investigation on board the Mars Reconnaissance
+      Orbiter, JGR 112, E05S04, doi:10.1029/2006JE002808; about 6 m/pixel from MRO's
+      mapping orbit (PDS CTX instrument description).

@@ -40,6 +40,10 @@ A refresher for explaining Fidelis to recruiters. Plain English first, key techn
 
 **Why failure flags correlate worse than errors** — turning a continuous error into a pass/fail flag throws information away, and a biased cheap model puts its pass/fail cutoff in a different place from the expensive one. *In Fidelis:* a synthetic prototype showed this clearly: cheap and expensive errors that tracked each other closely gave pass/fail flags that agreed much less. That is why Fidelis plans a smoothed (sigmoid) failure indicator, and why the pilot study measures correlation on the failure quantity itself. It still needs confirming on real renders.
 
+**DTM, orthoimage, and the matching map**: a DTM (digital terrain model) is a height map, one elevation per pixel. An orthoimage is an overhead photo corrected so every pixel lands where it belongs on the map. *In Fidelis:* USGS's Jezero DTM (1 m pixels) and orthoimage (0.25 m pixels, from HiRISE) are the ground truth for the test scene. The navigator doesn't match against that sharp photo, though. Perseverance's Lander Vision System matched against a map from the coarser CTX camera, about 6 m per pixel, so Fidelis averages the orthoimage down 24× to match. A sharper map than the real one would make the navigator look better than it is.
+
+**Checksums and pinning data**: a checksum (here SHA-256) is a short fingerprint of a file's exact bytes. Change one byte and the fingerprint changes. *In Fidelis:* USGS doesn't publish checksums for the Jezero mosaics, so the first download records its own, and every later download on any machine has to match it. That catches a truncated download or a file quietly replaced upstream. The catch is that it trusts the first download ("trust on first use").
+
 ## Challenges and how we solved them
 
 <!-- Format: ### Title — then: the problem, how we noticed, what we did, what it taught us. -->
@@ -71,3 +75,5 @@ None yet. Numbers go here only once they're committed in `docs/benchmarks/` or `
 ## Honest limitations
 
 <!-- What the results don't show, and why. -->
+
+- **The CTX-like map is an approximation.** It's the HiRISE orthoimage averaged in 24×24 blocks. That removes detail CTX can't see, but it doesn't model CTX's optics, noise, or different viewing geometry, and it isn't the real onboard LVS map.

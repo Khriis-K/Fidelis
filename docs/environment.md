@@ -78,6 +78,14 @@ Reinstalling gsplat (for example after `uv sync` changes its commit) gives its s
 
 The `_jit_compile() missing 2 required positional arguments` warning sometimes seen in build logs is harmless: gsplat tries torch's old private signature first, catches the error, and retries with the new one.
 
+### Snakemake crashes on Windows without `which`
+
+**Symptom:** any Snakemake command, including a local dry run, fails at startup with `FileNotFoundError: [WinError 2]` from inside `snakemake_executor_plugin_slurm`.
+
+**Cause:** Snakemake imports every installed executor plugin, even under `profiles/local`. At import, the SLURM plugin 2.8.0 probes for `sacct` by running the Unix `which` command. It only catches the error for "which ran and found nothing", not "there is no `which`" (seen 2026-11-01).
+
+**Fix:** run Snakemake and `pytest` from Git Bash, or from any shell with Git's `usr\bin` on `PATH`, so `which` resolves. Plain PowerShell fails.
+
 ### Harmless warnings
 
 - `jitc_llvm_init(): LLVM API initialization failed` on importing Mitsuba: Dr.Jit's CPU (LLVM) backend can't find an LLVM install. Fidelis only uses the CUDA variant.
