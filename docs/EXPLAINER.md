@@ -54,6 +54,16 @@ A refresher for explaining Fidelis to recruiters. Plain English first, key techn
 
 **What it taught us.** Test that a library *works*, not that it *imports*. Check upstream before patching: every fix we needed already existed, just unreleased. And when you must carry fixes, pin them to an exact commit and write down when to drop them.
 
+### A cluster job that waited hours to fail in seconds
+
+**The problem.** On the university cluster, a GPU job waits in a shared queue, sometimes for hours, before it runs. The first cluster smoke test waited its turn in the queue, ran for 40 seconds, and failed one of its five checks: gsplat found no CUDA compiler.
+
+**How we noticed.** The job log had a one-line module-system error near the top: the CUDA module "exists but cannot be loaded as requested". It needed two other modules loaded first. Snakemake runs a job's command even when its module load fails, so the job carried on without the compiler instead of stopping.
+
+**What we did.** `module spider` named the missing prerequisites, and we checked the corrected module line on the login node (no GPU, no queue) before resubmitting. Then we made that check automatic: a `preflight` step that Snakemake runs on the login node before submitting any GPU job, with the same modules. It confirms the CUDA compiler is there, matches PyTorch's CUDA version, and can compile a tiny kernel. If it fails, nothing is submitted.
+
+**What it taught us.** Anything checkable without the expensive resource should be checked before asking for it. Our docs had already warned about exactly this risk, and we submitted anyway, so a warning in a doc isn't a check. A step that runs every time is.
+
 ## Headline results
 
 None yet. Numbers go here only once they're committed in `docs/benchmarks/` or `docs/adr/`, each with its caveat.

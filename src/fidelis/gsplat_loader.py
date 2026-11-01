@@ -50,7 +50,7 @@ def import_gsplat() -> ModuleType:
         else:
             os.environ[name] = value
     if sys.platform == "win32" and shutil.which("cl") is None:
-        os.environ.update(_msvc_env())
+        os.environ.update(msvc_env())
 
     import gsplat  # noqa: TID251 -- the one sanctioned import
 
@@ -62,7 +62,7 @@ def parse_set_output(dump: str) -> dict[str, str]:
     return dict(line.split("=", 1) for line in dump.splitlines() if "=" in line)
 
 
-def _msvc_env() -> dict[str, str]:
+def msvc_env() -> dict[str, str]:
     """The environment a VS developer shell would have: the newest VS with C++ tools."""
     if not VSWHERE.exists():
         raise RuntimeError(f"Visual Studio Installer not found at {VSWHERE}; gsplat needs MSVC to load")

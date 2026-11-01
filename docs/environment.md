@@ -17,7 +17,7 @@ uv run pytest -m gpu     # the four GPU checks as tests (MXMCPy runs in the defa
 The same smoke test also runs as a Snakemake rule, which is how it runs on the cluster:
 
 ```bash
-uv run snakemake --profile profiles/local smoke   # laptop GPU
+uv run snakemake --profile profiles/local smoke   # laptop GPU; a preflight checks nvcc first
 uv run --no-sync snakemake --profile profiles/carc smoke   # CARC through SLURM; see docs/carc.md
 ```
 

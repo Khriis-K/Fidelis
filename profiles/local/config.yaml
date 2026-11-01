@@ -3,3 +3,5 @@ cores: 8
 resources:
   - gpu=1
 printshellcmds: true
+forcerun:
+  - preflight  # same check as on CARC, on every run

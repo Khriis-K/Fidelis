@@ -6,21 +6,45 @@
 # Rules declare what they need (GPUs, memory, time); the profile decides where it
 # runs: the account, partition, and pinned GPU model live in profiles/carc.
 
+# CARC modules for any rule that builds CUDA code. Only loaded with
+# --software-deployment-method env-modules (the CARC profile).
+CUDA_MODULES = [
+    # cuda/13.0.3 only loads after these two (`module spider cuda/13.0.3`).
+    "ver/2607",
+    "gcc/15.3.0",
+    "cuda/13.0.3",  # nvcc for gsplat's JIT build; must share torch's CUDA major (13)
+]
+
+localrules:
+    preflight,
+
+
+# Runs where Snakemake was launched (the CARC login node), with the same modules as
+# the GPU job, so a broken module line fails in seconds instead of after a queue wait.
+# Both profiles set `forcerun: [preflight]`, so it checks again on every invocation.
+# That also reruns everything downstream of it, so only always-run entry rules like
+# smoke should depend on it, never a rule with expensive outputs.
+rule preflight:
+    output:
+        touch("logs/preflight.ok"),
+    envmodules:
+        *CUDA_MODULES,
+    shell:
+        "fidelis-preflight"
+
 
 # Every core library does real GPU work and checks it against a known answer.
 # No output file, so `snakemake smoke` reruns it every time. The PASS/FAIL lines
 # go to the console locally and to the job log on SLURM.
 rule smoke:
+    input:
+        rules.preflight.output,
     resources:
         gpu=1,
         cpus_per_task=4,
         mem_mb=16000,
         runtime=30,  # minutes; the first run compiles gsplat (~6 min on the laptop)
     envmodules:
-        # Only loaded with --software-deployment-method env-modules (the CARC profile).
-        # cuda/13.0.3 only loads after these two (`module spider cuda/13.0.3`).
-        "ver/2607",
-        "gcc/15.3.0",
-        "cuda/13.0.3",  # nvcc for gsplat's JIT build; must share torch's CUDA major (13)
+        *CUDA_MODULES,
     shell:
         "nvidia-smi && fidelis-smoke"

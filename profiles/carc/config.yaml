@@ -16,6 +16,10 @@ default-resources:
 set-resources:
   - smoke:gpu_model=l40s
 
+# Check the module line on the login node on every run, before anything queues.
+forcerun:
+  - preflight
+
 software-deployment-method: env-modules
 slurm-keep-successful-logs: true
 latency-wait: 60  # shared file systems can be slow to show a job's outputs

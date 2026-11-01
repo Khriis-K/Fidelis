@@ -17,6 +17,7 @@ dependencies = [
 
 [project.scripts]
 fidelis-smoke = "fidelis.smoke:main"
+fidelis-preflight = "fidelis.preflight:main"
 
 [dependency-groups]
 dev = [

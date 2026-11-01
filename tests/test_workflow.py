@@ -44,6 +44,16 @@ def test_the_smoke_rule_runs_under_both_profiles(profile):
     assert jobs["smoke"]["gpu"] == "1"
 
 
+@pytest.mark.parametrize("profile", ["local", "carc"])
+def test_smoke_plans_a_preflight_first(profile):
+    # preflight is a localrule: it runs where Snakemake was launched (the CARC login
+    # node), so a broken module line fails in seconds instead of after a queue wait.
+    # A dry run doesn't show which jobs run locally; the CARC run log does.
+    jobs = planned_jobs(dry_run(profile, "smoke"))
+
+    assert "preflight" in jobs
+
+
 def test_carc_charges_the_course_account_explicitly():
     # Without slurm_account the SLURM plugin guesses from recent jobs, which could
     # charge another group.
