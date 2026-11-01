@@ -1,6 +1,6 @@
 import pytest
 
-from fidelis.preflight import check_nvcc, cuda_release, require_same_cuda_major
+from fidelis.preflight import check_nvcc, cuda_release, require_python_headers, require_same_cuda_major
 
 # `nvcc --version` on CARC after `module load ver/2607 gcc/15.3.0 cuda/13.0.3` (2026-10-31).
 CARC_NVCC_VERSION = """\
@@ -38,3 +38,16 @@ def test_check_nvcc_fails_when_nvcc_is_not_on_path(monkeypatch, tmp_path):
 
     with pytest.raises(AssertionError, match="nvcc not on PATH"):
         check_nvcc()
+
+
+def test_python_headers_pass_when_python_h_is_there(tmp_path):
+    (tmp_path / "Python.h").touch()
+
+    require_python_headers(tmp_path)
+
+
+def test_python_headers_fail_without_python_h(tmp_path):
+    # CARC's first venv used /usr/bin/python3.12, whose include dir doesn't exist on the
+    # compute nodes, so gsplat's host C++ failed with "Python.h: No such file".
+    with pytest.raises(AssertionError, match="Python.h"):
+        require_python_headers(tmp_path / "python3.12")

@@ -38,6 +38,9 @@ build-backend = "uv_build"
 required-version = ">=0.12.5"
 # `uv sync` installs the workflow tools (Snakemake, SLURM plugin) on both machines.
 default-groups = ["dev", "workflow"]
+# uv's own Python builds, never the system one: they ship the headers (Python.h) that
+# gsplat's JIT build needs, and they're the same on every CARC node.
+python-preference = "only-managed"
 # Laptop (Windows) and CARC (Linux) only; keeps the lock small.
 environments = ["sys_platform == 'win32'", "sys_platform == 'linux'"]
 
@@ -52,9 +55,10 @@ lightglue = { git = "https://github.com/cvg/LightGlue" }
 # PyPI's 1.0 calls torch.solve (removed from torch); upstream fixed it after the release.
 mxmcpy = { git = "https://github.com/nasa/MXMCPy", rev = "367c7de4c6" }
 # PyPI's 1.5.3 doesn't build with MSVC + CUDA 13. Our fork's fidelis-windows branch is
-# upstream main @ 512d366 + PR 1085 + the SH fix from PR 1055 (both unmerged). Switch to
-# an official release once those land. See docs/environment.md.
-gsplat = { git = "https://github.com/Khriis-K/gsplat", rev = "f18cca6c9fb804726e2e8f7ab44c50a533bcad54" }
+# upstream main @ 512d366 + PR 1085 + the SH fix from PR 1055 (both unmerged) + a
+# <math.h> include for Linux g++. Switch to an official release once those land.
+# See docs/environment.md.
+gsplat = { git = "https://github.com/Khriis-K/gsplat", rev = "0270f884c37431fada11e35a0bbd2ba60aa060f4" }
 
 # Install gsplat as Python only; it JIT-compiles its CUDA code on first use instead.
 [tool.uv.extra-build-variables]

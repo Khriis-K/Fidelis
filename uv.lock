@@ -290,7 +290,7 @@ workflow = [
 
 [package.metadata]
 requires-dist = [
-    { name = "gsplat", git = "https://github.com/Khriis-K/gsplat?rev=f18cca6c9fb804726e2e8f7ab44c50a533bcad54" },
+    { name = "gsplat", git = "https://github.com/Khriis-K/gsplat?rev=0270f884c37431fada11e35a0bbd2ba60aa060f4" },
     { name = "lightglue", git = "https://github.com/cvg/LightGlue" },
     { name = "mitsuba", specifier = ">=3.9" },
     { name = "mxmcpy", git = "https://github.com/nasa/MXMCPy?rev=367c7de4c6" },
@@ -387,7 +387,7 @@ wheels = [
 [[package]]
 name = "gsplat"
 version = "1.6.0"
-source = { git = "https://github.com/Khriis-K/gsplat?rev=f18cca6c9fb804726e2e8f7ab44c50a533bcad54#f18cca6c9fb804726e2e8f7ab44c50a533bcad54" }
+source = { git = "https://github.com/Khriis-K/gsplat?rev=0270f884c37431fada11e35a0bbd2ba60aa060f4#0270f884c37431fada11e35a0bbd2ba60aa060f4" }
 dependencies = [
     { name = "jaxtyping" },
     { name = "ninja" },

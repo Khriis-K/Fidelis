@@ -37,10 +37,10 @@ On Windows, gsplat needs Visual Studio 2022 with the C++ build tools installed, 
 
 ## Pinned versions and why
 
-- **Python 3.12** (`.python-version`, `requires-python`). The laptop's global Python is 3.14; uv installs and uses 3.12 instead, which every core library ships wheels for.
+- **Python 3.12** (`.python-version`, `requires-python`), always a uv-managed build (`python-preference = "only-managed"`): unlike a system Python, it ships `Python.h`, which gsplat's JIT build compiles against, and it's identical on every CARC node. The laptop's global Python is 3.14; uv installs and uses 3.12 instead, which every core library ships wheels for.
 - **torch 2.15.0 + CUDA 13.4 (`cu134`)**, from PyTorch's own index on both Windows and Linux. PyPI's Windows torch is CPU-only. `cu134` includes `sm_120` kernels for the Blackwell RTX 5070, and it matches the laptop's CUDA toolkit (13.4), which gsplat's JIT build needs (torch checks that the toolkit and its own CUDA share a major version).
 - **MXMCPy from GitHub**, commit `367c7de`, not PyPI. See workarounds below.
-- **gsplat from our fork**, [`Khriis-K/gsplat`](https://github.com/Khriis-K/gsplat/tree/fidelis-windows) branch `fidelis-windows`, commit `f18cca6`, not PyPI. See workarounds below.
+- **gsplat from our fork**, [`Khriis-K/gsplat`](https://github.com/Khriis-K/gsplat/tree/fidelis-windows) branch `fidelis-windows`, commit `0270f88`, not PyPI. See workarounds below.
 - **LightGlue from GitHub** (not on PyPI); `uv.lock` pins the commit.
 - **uv ≥ 0.12.5** (`required-version`), so the laptop (0.12.5) and CARC (0.13.6) both read the same `uv.lock`.
 - **Snakemake 9 + snakemake-executor-plugin-slurm 2**, in the `workflow` dependency group. `default-groups` makes plain `uv sync` install it.
@@ -67,7 +67,7 @@ gsplat has no prebuilt Windows wheels for torch 2.15 (the published ones stop at
 | `calling a __host__ function("isfinite<float>")` | MSVC's `std::isfinite` isn't callable from device code | gsplat PR 1085 (unmerged) |
 | `calling a __host__ function("std::array<float, 0>::operator[]")` | MSVC's zero-length `std::array` isn't device-safe | gsplat PR 1055 (unmerged) |
 
-The two PRs fix different bugs and uv installs one commit, so the fork's `fidelis-windows` branch is upstream `main` @ `512d366`, plus PR 1085's three commits, plus PR 1055's two-line `cuda::std::array` fix. **Switch back to an official gsplat release once both land upstream.**
+The two PRs fix different bugs and uv installs one commit, so the fork's `fidelis-windows` branch is upstream `main` @ `512d366`, plus PR 1085's three commits, plus PR 1055's two-line `cuda::std::array` fix, plus one Linux fix of our own: PR 1085 changed `std::isfinite` to `::isfinite` in `Cameras.cuh`, which g++ rejects in the host `.cpp` files ("'::isfinite' has not been declared", first CARC run with gsplat building, 2026-11-01), so `0270f88` adds `#include <math.h>`, whose libstdc++ version puts `isfinite` in the global namespace (reproduced and fixed with g++ 13 in WSL). **Switch back to an official gsplat release once both land upstream.**
 
 Two settings live in `src/fidelis/gsplat_loader.py`. Import gsplat through `import_gsplat()`, never directly:
 
@@ -85,4 +85,4 @@ The `_jit_compile() missing 2 required positional arguments` warning sometimes s
 ## Open
 
 - **gsplat upstream**: watch PRs 1055 and 1085; once both are released, drop the fork.
-- **CARC.** Not yet checked. gsplat will JIT-compile there too. The fork's changes target MSVC, but PR 1085 also swaps a CUB radix sort for `at::sort` on every platform, so the fork is untested on Linux until the cluster smoke test runs. `cu134` torch needs an NVIDIA driver from the R580 series or newer (CUDA 13 minor-version compatibility). Check the driver version with `nvidia-smi` on a GPU node before the cluster smoke test.
+- **CARC.** torch, mitsuba, lightglue and mxmcpy pass on an L40S; gsplat hasn't passed yet. Its CUDA files compile there with nvcc 13.0 and GCC 15.3, and the two host-side build failures (`::isfinite`, missing `Python.h`) are fixed but not yet rerun. PR 1085 also swaps a CUB radix sort for `at::sort` on every platform, which is untested on Linux until gsplat's check passes there. See docs/carc.md.

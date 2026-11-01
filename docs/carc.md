@@ -120,6 +120,8 @@ uv run pytest                                    # GPU-free suite
 exit                                             # release the debug node
 ```
 
+The venv uses a uv-managed Python 3.12 (`python-preference = "only-managed"` in `pyproject.toml`), not the node's `/usr/bin/python3.12`. The first venv was built on the system Python, which gave two problems: its interpreter differed between nodes (3.12.15 on e23-02, 3.12.14 on d11-03, so uv warned about an incompatible environment), and the compute nodes lack its headers, so gsplat's build failed with `Python.h: No such file or directory` (job 13639170). A venv made before that change must be deleted once (`rm -rf .venv`) before `uv sync`; uv installs the interpreter under `~/.local/share/uv/python`.
+
 Re-run `uv sync` after any `git pull` that changes `uv.lock`. A `/scratch1` purge only costs a re-download, because `UV_LINK_MODE=copy` means the venv doesn't point into the cache.
 
 ## Workflow profiles
@@ -140,7 +142,7 @@ On CARC, launch with `uv run --no-sync snakemake ...`. uv puts the venv on `PATH
 
 The `smoke` rule runs `nvidia-smi` (driver version and GPU model) and then `fidelis-smoke` (the five library checks). It has no output file, so it runs every time it's requested. On CARC the PASS/FAIL lines land in the job log at `.snakemake/slurm_logs/rule_smoke/<jobid>.log`.
 
-Before `smoke` is submitted, the `preflight` rule runs `fidelis-preflight` on the login node (a `localrule`), with the same modules as `smoke`. It checks that `nvcc` is on `PATH`, that it shares torch's CUDA major version, and that it compiles a trivial kernel with the loaded host compiler. It takes seconds and needs no GPU. If it fails, nothing is submitted, and its PASS/FAIL lines print in the terminal. Both profiles set `forcerun: [preflight]`, so it runs on every invocation, not only the first. It can't check anything that needs a GPU: the driver, or gsplat's build for the node's GPU architecture. The first L40S run (job 13632519) would have been caught by it.
+Before `smoke` is submitted, the `preflight` rule runs `fidelis-preflight` on the login node (a `localrule`), with the same modules as `smoke`. It checks that `nvcc` is on `PATH`, that it shares torch's CUDA major version, that it compiles a trivial kernel with the loaded host compiler, and that the venv's Python has the `Python.h` torch compiles extensions against. It takes seconds and needs no GPU. If it fails, nothing is submitted, and its PASS/FAIL lines print in the terminal. Both profiles set `forcerun: [preflight]`, so it runs on every invocation, not only the first. It can't check anything that needs a GPU: the driver, or gsplat's build for the node's GPU architecture. The first L40S run (job 13632519) would have been caught by it.
 
 Cost: the rule reserves 1 GPU, 4 CPUs, and 16 GB for at most 30 minutes, which is at most 480 SUs per run (8 + 4 + 4 SUs per minute).
 
@@ -174,6 +176,7 @@ This doesn't pin the A100 memory size (40 or 80 GB). The smoke test isn't timed,
 
 - **CUDA toolkit module and its prerequisites.** gsplat needs `nvcc` from a CUDA toolkit with the same major version as torch's CUDA (13); without it gsplat prints "No CUDA toolkit found" and its check fails. CARC's newest is `cuda/13.0.3` (`module spider cuda`, 2026-10-31; the other versions go from 10.0 to 12.9). It only loads after `ver/2607` and `gcc/15.3.0` (`module spider cuda/13.0.3`, 2026-10-31), so the rule loads all three, in that order, through Snakemake's `envmodules`. torch's `cu134` build with a 13.0 toolkit passes torch's major-version check. Whether nvcc 13.0 accepts GCC 15 as a host compiler and compiles gsplat cleanly is unverified until a cluster run passes.
 - **A failed module load doesn't stop the job.** Snakemake 9.27.1 runs `module purge && module load ...; <command>` (`snakemake/deployment/env_modules.py`). The `;` means the command runs even when the load fails, so the only trace is an Lmod error near the top of the job log. The first L40S run (job 13632519, 2026-10-31) loaded `gcc/13.3.0` and `cuda/13.0.3` together, Lmod refused `cuda/13.0.3` ("exist but cannot be loaded as requested"), and gsplat failed while the other four checks passed. The `preflight` rule now checks this on the login node before every submission (see "Cluster smoke test").
+- **gsplat's host C++ on Linux.** Job 13639170 (L40S, b18-17, 2026-11-01) loaded the modules and compiled all of gsplat's CUDA files, then failed on two host `.cpp` files: `'::isfinite' has not been declared` (a bug in our fork, fixed in `0270f88`; see docs/environment.md) and the missing `Python.h` above. The preflight now checks for `Python.h`; it can't catch C++ errors in gsplat itself short of building it.
 - **Driver.** The `cu134` torch build needs an R580-or-newer driver. The L40S node c04-02 runs 580.159.04 (`nvidia-smi` in job 13632519's log, 2026-10-31).
 
 ## Running the Snakemake controller

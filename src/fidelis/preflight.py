@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import sys
+import sysconfig
 import tempfile
 from pathlib import Path
 
@@ -47,6 +48,19 @@ def check_nvcc() -> str:
     return f"nvcc {release}, torch built for CUDA {torch.version.cuda}"
 
 
+def require_python_headers(include_dir: Path) -> None:
+    """torch builds C++ extensions (gsplat's host code) against the interpreter's Python.h."""
+    if not (include_dir / "Python.h").is_file():
+        raise AssertionError(f"no Python.h in {include_dir}; use a uv-managed Python, which ships headers")
+
+
+def check_python_headers() -> str:
+    """The venv's interpreter has the headers torch's JIT build includes."""
+    include_dir = Path(sysconfig.get_paths()["include"])
+    require_python_headers(include_dir)
+    return f"Python.h in {include_dir}"
+
+
 def check_nvcc_compiles() -> str:
     """nvcc accepts the host compiler: it compiles a trivial kernel (no GPU needed)."""
     env = os.environ.copy()
@@ -69,6 +83,7 @@ def check_nvcc_compiles() -> str:
 CHECKS: dict[str, Check] = {
     "nvcc": check_nvcc,
     "nvcc compile": check_nvcc_compiles,
+    "python headers": check_python_headers,
 }
 
 
