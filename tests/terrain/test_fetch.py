@@ -1,4 +1,6 @@
 import hashlib
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
@@ -63,6 +65,33 @@ def test_fetch_rejects_a_download_that_does_not_match_the_pin(source, tmp_path):
         fetch(source.as_uri(), dest, sha256=digest(b"what we pinned last time"))
 
     assert list(tmp_path.glob("mosaic.tif*")) == [], "a rejected download must leave nothing behind"
+
+
+class RejectsPythonUrllib(BaseHTTPRequestHandler):
+    """Like Cloudflare in front of planetarymaps.usgs.gov: 403 for urllib's default User-Agent."""
+
+    def do_GET(self):
+        if self.headers.get("User-Agent", "").startswith("Python-urllib"):
+            self.send_error(403)
+            return
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(CONTENT)))
+        self.end_headers()
+        self.wfile.write(CONTENT)
+
+    def log_message(self, *args):
+        pass
+
+
+def test_fetch_gets_past_a_server_that_blocks_pythons_default_user_agent(tmp_path):
+    # The first real run (2026-11-01) got HTTP 403 on both mosaics for exactly this.
+    server = HTTPServer(("127.0.0.1", 0), RejectsPythonUrllib)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        url = f"http://127.0.0.1:{server.server_port}/mosaic.tif"
+        assert fetch(url, tmp_path / "mosaic.tif", sha256=digest(CONTENT)) == digest(CONTENT)
+    finally:
+        server.shutdown()
 
 
 def test_fetch_without_a_pin_downloads_and_reports_the_hash_to_pin(source, tmp_path):

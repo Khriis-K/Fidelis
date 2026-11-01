@@ -17,6 +17,9 @@ from pathlib import Path
 CHUNK = 1 << 20
 # Seconds a stalled connection may sit idle (per read, not for the whole download).
 TIMEOUT_S = 60
+# Cloudflare in front of planetarymaps.usgs.gov returns 403 to urllib's default
+# "Python-urllib/3.x" User-Agent (any other passes; checked with curl, 2026-11-01).
+USER_AGENT = "fidelis/0.1 (+https://github.com/Khriis-K/Fidelis)"
 
 
 def sha256_of(path: Path) -> str:
@@ -44,7 +47,8 @@ def fetch(url: str, dest: Path, sha256: str | None) -> str:
     part = dest.with_name(dest.name + ".part")
     digest = hashlib.sha256()
     try:
-        with urllib.request.urlopen(url, timeout=TIMEOUT_S) as response, open(part, "wb") as f:
+        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(request, timeout=TIMEOUT_S) as response, open(part, "wb") as f:
             while chunk := response.read(CHUNK):
                 digest.update(chunk)
                 f.write(chunk)
