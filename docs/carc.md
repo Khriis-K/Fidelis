@@ -101,7 +101,7 @@ To pick an A100 size, add `--constraint=a100-40gb` or `--constraint=a100-80gb`. 
   - `/project2/irahbari_1147/ckuizon/fidelis/` holds the git clone, its `.venv`, raw USGS data, splat checkpoints, fine-tuned weights, and final results.
   - `/scratch1/ckuizon/fidelis/` holds the uv cache, intermediate renders, per-batch Monte Carlo outputs, and sweep logs.
 - `~/.bashrc` sets `UV_CACHE_DIR=/scratch1/ckuizon/fidelis/uv-cache` and `UV_LINK_MODE=copy`. The cache and the venv sit on different file systems, so uv can't hardlink between them. Copying also means a scratch purge can't break the venv.
-- uv 0.13.6 is installed at `~/.local/bin` (2026-10-28). If a shell can't find `uv`, run `source $HOME/.local/bin/env`. **Open:** `uv sync` hasn't been tested on CARC yet (setup steps below). The lock pins torch `cu134`, which needs an NVIDIA driver from the R580 series or newer (CUDA 13 minor-version compatibility, per NVIDIA's CUDA compatibility docs); check `nvidia-smi` on a GPU node. See `docs/environment.md`.
+- uv 0.13.6 is installed at `~/.local/bin` (2026-10-28). If a shell can't find `uv`, run `source $HOME/.local/bin/env`. `uv sync` works on CARC (setup steps below; the L40S smoke test passed from that venv on 2026-11-01). The lock pins torch `cu134`, which needs an NVIDIA driver from the R580 series or newer (CUDA 13 minor-version compatibility, per NVIDIA's CUDA compatibility docs); see "Driver" below. See `docs/environment.md`.
 - The repo is cloned at `/project2/irahbari_1147/ckuizon/fidelis`. The workflow: edit locally, push, then `git pull` on CARC. If you ever commit on CARC, run `git config core.hooksPath .githooks` in the clone first.
 - To install packages or debug on the cluster, use an interactive debug node (`salloc -p debug -c 4`), not the login node. [CARC]
 - `os.cpu_count()` reports every CPU on the node, not the job's share. Use `len(os.sched_getaffinity(0))` instead. [Places]
@@ -136,7 +136,7 @@ Two plugin behaviors drive those choices (snakemake-executor-plugin-slurm 2.8.0,
 - **With no `slurm_account`, the plugin guesses one from your recent jobs** (`get_account_arg` in `__init__.py`). On CARC that could be the other group's account, so the profile always sets it. `tests/test_workflow.py` checks every planned job.
 - **Setting `gpu_model` makes the plugin request a GPU** (`--gpus=<model>:1`, `set_gres_string` in `utils.py`) even for a rule that declares none. So the model is pinned per rule in `set-resources`, never in `default-resources`.
 
-On CARC, launch with `uv run --no-sync snakemake ...`. uv puts the venv on `PATH`, and the plugin submits with `--export=ALL` (`submit_string.py`), so jobs should inherit it and run `fidelis-smoke` and the job-side Snakemake from the venv (unverified on CARC until the first run). `--no-sync` stops uv from re-syncing the venv on the login node when `uv.lock` has changed, which would unpack multi-GB CUDA wheels there. Sync on a debug node instead (above).
+On CARC, launch with `uv run --no-sync snakemake ...`. uv puts the venv on `PATH`, and the plugin submits with `--export=ALL` (`submit_string.py`), so jobs inherit it and run `fidelis-smoke` and the job-side Snakemake from the venv (job 13649053's log shows the job-side Snakemake running from `.venv/lib/python3.12/site-packages`). `--no-sync` stops uv from re-syncing the venv on the login node when `uv.lock` has changed, which would unpack multi-GB CUDA wheels there. Sync on a debug node instead (above).
 
 ## Cluster smoke test
 
@@ -169,28 +169,30 @@ This doesn't pin the A100 memory size (40 or 80 GB). The smoke test isn't timed,
 
 | GPU type | Date | Driver | Result | Job log |
 |---|---|---|---|---|
-| `l40s` | | | **open**: not run yet | |
+| `l40s` | 2026-11-01 | 580.159.04 | 5/5 pass (c04-02, 38 s) | job 13649053, `.snakemake/slurm_logs/rule_smoke/13649053.log` |
 | `a100` | | | **open**: not run yet | |
 
 ### CARC-specific workarounds
 
-- **CUDA toolkit module and its prerequisites.** gsplat needs `nvcc` from a CUDA toolkit with the same major version as torch's CUDA (13); without it gsplat prints "No CUDA toolkit found" and its check fails. CARC's newest is `cuda/13.0.3` (`module spider cuda`, 2026-10-31; the other versions go from 10.0 to 12.9). It only loads after `ver/2607` and `gcc/15.3.0` (`module spider cuda/13.0.3`, 2026-10-31), so the rule loads all three, in that order, through Snakemake's `envmodules`. torch's `cu134` build with a 13.0 toolkit passes torch's major-version check. Whether nvcc 13.0 accepts GCC 15 as a host compiler and compiles gsplat cleanly is unverified until a cluster run passes.
+- **CUDA toolkit module and its prerequisites.** gsplat needs `nvcc` from a CUDA toolkit with the same major version as torch's CUDA (13); without it gsplat prints "No CUDA toolkit found" and its check fails. CARC's newest is `cuda/13.0.3` (`module spider cuda`, 2026-10-31; the other versions go from 10.0 to 12.9). It only loads after `ver/2607` and `gcc/15.3.0` (`module spider cuda/13.0.3`, 2026-10-31), so the rule loads all three, in that order, through Snakemake's `envmodules`. torch's `cu134` build with a 13.0 toolkit passes torch's major-version check, and nvcc 13.0 with GCC 15 builds gsplat (see below).
 - **A failed module load doesn't stop the job.** Snakemake 9.27.1 runs `module purge && module load ...; <command>` (`snakemake/deployment/env_modules.py`). The `;` means the command runs even when the load fails, so the only trace is an Lmod error near the top of the job log. The first L40S run (job 13632519, 2026-10-31) loaded `gcc/13.3.0` and `cuda/13.0.3` together, Lmod refused `cuda/13.0.3` ("exist but cannot be loaded as requested"), and gsplat failed while the other four checks passed. The `preflight` rule now checks this on the login node before every submission (see "Cluster smoke test").
-- **gsplat's host C++ on Linux.** Job 13639170 (L40S, b18-17, 2026-11-01) loaded the modules and compiled all of gsplat's CUDA files, then failed on two host `.cpp` files: `'::isfinite' has not been declared` (a bug in our fork, fixed in `0270f88`; see docs/environment.md) and the missing `Python.h` above. The preflight now checks for `Python.h`; it can't catch C++ errors in gsplat itself short of building it. With both fixes, gsplat's full build (all 51 steps, including the link) succeeded on a CPU-only debug node in 300 s (2026-11-01). It hasn't yet run on a GPU on CARC.
+- **gsplat's host C++ on Linux.** Job 13639170 (L40S, b18-17, 2026-11-01) loaded the modules and compiled all of gsplat's CUDA files, then failed on two host `.cpp` files: `'::isfinite' has not been declared` (a bug in our fork, fixed in `0270f88`; see docs/environment.md) and the missing `Python.h` above. The preflight now checks for `Python.h`; it can't catch C++ errors in gsplat itself short of building it. With both fixes, gsplat's full build (all 51 steps, including the link) succeeded on a CPU-only debug node in 300 s (2026-11-01), and the L40S job 13649053 then rendered with it (gsplat check passed).
 - **Build gsplat on a CPU node before a GPU job.** gsplat's JIT build needs no GPU if `TORCH_CUDA_ARCH_LIST` names the target chip, so test a build on a debug allocation (which gets through the queue in minutes) instead of a GPU slot:
   ```bash
   salloc -p debug -c 8 --mem 32G --account=irahbari_1147 -t 1:00:00
   cd /project2/irahbari_1147/ckuizon/fidelis && module purge && module load ver/2607 gcc/15.3.0 cuda/13.0.3 && TORCH_CUDA_ARCH_LIST="8.9+PTX" uv run --no-sync python -c "from fidelis.gsplat_loader import import_gsplat; import_gsplat(); from gsplat.cuda._backend import _C; print('GSPLAT BUILT:', _C)"
   ```
-  Go through `import_gsplat()` so the build flags match the GPU job's; otherwise gsplat wipes the cache when the job loads it. `8.9+PTX` is the L40S (sm_89); torch's own auto-detection on an L40S produces the same `-gencode` flags, so the GPU job should reuse this build rather than recompile (unverified until the next L40S log). Don't run it while a GPU job may be building gsplat: the two would race on the same cache directory.
+  Go through `import_gsplat()` so the build flags match the GPU job's; otherwise gsplat wipes the cache when the job loads it. `8.9+PTX` is the L40S (sm_89); torch's own auto-detection on an L40S produces the same `-gencode` flags, so the GPU job reuses this build: job 13649053 printed no build output and finished all five checks in 38 s, against 300 s for the build alone. Don't run it while a GPU job may be building gsplat: the two would race on the same cache directory.
 - **Driver.** The `cu134` torch build needs an R580-or-newer driver. The L40S node c04-02 runs 580.159.04 (`nvidia-smi` in job 13632519's log, 2026-10-31).
+- **Harmless warning: `jitc_llvm_init(): LLVM API initialization failed`.** Mitsuba's JIT (Dr.Jit) tries to load LLVM for its CPU backend at import and finds none on the compute node. Fidelis uses the `cuda_ad_rgb` variant, which doesn't need LLVM, and the Mitsuba check passes with the warning printed (job 13649053). It would matter only for an `llvm_*` variant.
 
 ## Running the Snakemake controller
 
 The Snakemake controller process has to stay alive for the whole workflow. It's light, but it runs for a long time. Options:
 - **tmux on a fixed login node** (`discovery1.usc.edu`). CARC documents tmux on login nodes (`module load gcc/13.3.0 tmux/3.4`), but login nodes reboot during maintenance. That's survivable, because Snakemake reruns only missing steps. [CARC]
 - **Inside a long CPU job** on `main` (48 h) or `oneweek` (168 h). It's never killed by a login-node cleanup, but it costs SUs while it waits.
-- **Open:** pick one. Also check that the SLURM plugin's status polling stays well under the login node's 64-process limit.
+- **Not inside a debug or other `salloc` allocation.** The controller dies when the allocation ends, and the SLURM plugin then cancels the jobs it submitted. Snakemake warns about this when it starts inside a SLURM job context; job 13648542 was cancelled for this reason (2026-11-01).
+- **In use:** tmux on `discovery1`. The L40S smoke test (job 13649053) ran this way. **Open:** check that the SLURM plugin's status polling stays well under the login node's 64-process limit.
 
 ## Monitoring commands
 

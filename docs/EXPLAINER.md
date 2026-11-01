@@ -2,7 +2,7 @@
 
 A refresher for explaining Fidelis to recruiters. Plain English first, key technical terms kept.
 
-> **Status:** early development. The Python environment and a smoke test of every core library exist (`docs/environment.md`). All five pass on the dev laptop; the cluster is untested. Everything else below describes the *planned* system from `docs/fidelis-spec.md`, and nothing has been measured yet.
+> **Status:** early development. The Python environment and a smoke test of every core library exist (`docs/environment.md`). All five pass on the dev laptop and on an L40S GPU on USC's CARC cluster, run through the same Snakemake workflow. Everything else below describes the *planned* system from `docs/fidelis-spec.md`, and nothing has been measured yet.
 
 ## The two-minute pitch
 
@@ -60,7 +60,7 @@ A refresher for explaining Fidelis to recruiters. Plain English first, key techn
 
 **How we noticed.** The job log had a one-line module-system error near the top: the CUDA module "exists but cannot be loaded as requested". It needed two other modules loaded first. Snakemake runs a job's command even when its module load fails, so the job carried on without the compiler instead of stopping.
 
-**What we did.** `module spider` named the missing prerequisites, and we checked the corrected module line on the login node (no GPU, no queue) before resubmitting. Then we made that check automatic: a `preflight` step that Snakemake runs on the login node before submitting any GPU job, with the same modules. It confirms the CUDA compiler is there, matches PyTorch's CUDA version, and can compile a tiny kernel. If it fails, nothing is submitted. The next run got further and hit two new walls inside gsplat's build: a line in our own Windows fork that Linux's compiler rejects, and a system Python missing its C headers. We reproduced the first in a Linux environment on the laptop before touching the cluster again, and added a header check to the preflight for the second.
+**What we did.** `module spider` named the missing prerequisites, and we checked the corrected module line on the login node (no GPU, no queue) before resubmitting. Then we made that check automatic: a `preflight` step that Snakemake runs on the login node before submitting any GPU job, with the same modules. It confirms the CUDA compiler is there, matches PyTorch's CUDA version, and can compile a tiny kernel. If it fails, nothing is submitted. The next run got further and hit two new walls inside gsplat's build: a line in our own Windows fork that Linux's compiler rejects, and a system Python missing its C headers. We reproduced the first in a Linux environment on the laptop before touching the cluster again, and added a header check to the preflight for the second. Instead of spending another GPU slot to test the fix, we compiled gsplat on a CPU-only debug node, which gets through the queue in minutes: the build doesn't need a GPU as long as you tell it which chip to target. The next GPU job reused that build and passed all five checks in 38 seconds.
 
 **What it taught us.** Anything checkable without the expensive resource should be checked before asking for it. Our docs had already warned about exactly this risk, and we submitted anyway, so a warning in a doc isn't a check. A step that runs every time is.
 
