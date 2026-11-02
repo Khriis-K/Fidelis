@@ -1,6 +1,6 @@
 import numpy as np
 
-from fidelis.nav.match_viz import INLIER_BGR, OUTLIER_BGR, draw_matches
+from fidelis.nav.match_viz import INLIER_BGR, KEYPOINT_BGR, OUTLIER_BGR, draw_matches
 
 DESCENT = np.full((200, 300), 0.5, np.float32)
 MAP = np.full((400, 500), 0.5, np.float32)  # scaled by 0.5 to the descent image's height
@@ -32,6 +32,22 @@ def test_an_inlier_and_an_outlier_are_drawn_in_their_own_colours():
 
 def test_the_inlier_and_outlier_colours_differ():
     assert INLIER_BGR != OUTLIER_BGR
+
+
+def test_keypoints_that_found_no_match_are_drawn_on_both_sides():
+    empty = np.zeros((0, 2))
+    canvas = draw_matches(
+        DESCENT,
+        MAP,
+        empty,
+        empty,
+        np.zeros(0, bool),
+        image_keypoints=np.array([[40.0, 50.0]]),
+        map_keypoints=np.array([[100.0, 300.0]]),
+    )
+    assert tuple(canvas[50, 40]) == KEYPOINT_BGR
+    assert tuple(canvas[150, 300 + 50]) == KEYPOINT_BGR  # map pixel (100, 300) at half scale
+    assert KEYPOINT_BGR not in (INLIER_BGR, OUTLIER_BGR)
 
 
 def test_a_run_with_no_matches_still_gets_a_picture():

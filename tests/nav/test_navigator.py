@@ -157,6 +157,17 @@ def test_a_turned_views_matched_pixels_are_in_the_cameras_own_frame(navigator, f
     assert np.allclose(result.pose.rotation, attitude(90.0), atol=0.01)
 
 
+def test_the_result_keeps_every_keypoint_matched_or_not_in_the_cameras_own_frame(navigator, flat_map):
+    # The match picture draws unmatched keypoints too; on a turned view they must come back
+    # through the warp like the matched ones, so each matched pixel is one of them.
+    result = navigator.locate(np.clip(nadir_view(flat_map, 90.0), 0, 1), K, attitude(90.0))
+    assert len(result.keypoints) > result.match_count
+    distance = np.linalg.norm(result.image_points[:, None] - result.keypoints[None], axis=2).min(axis=1)
+    assert distance.max() < 1e-9
+    inside = (result.keypoints >= -0.5) & (result.keypoints <= [K.width - 0.5, K.height - 0.5])
+    assert inside.all()
+
+
 def test_a_featureless_image_gives_a_failure_record_not_an_exception(navigator):
     result = navigator.locate(np.zeros((K.height, K.width), np.float32), K)
     assert result.status != "ok"

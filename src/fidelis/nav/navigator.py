@@ -91,6 +91,7 @@ class NavResult:
     image_points: np.ndarray  # N x 2 matched descent-image pixels (OpenCV convention)
     map_points: np.ndarray  # N x 2 matched map pixels, same order
     inliers: np.ndarray  # N bools, RANSAC's inlier mask
+    keypoints: np.ndarray  # K x 2, every descent-image keypoint, matched or not (camera pixels)
 
     @property
     def position(self) -> np.ndarray | None:
@@ -136,13 +137,14 @@ class Navigator:
             else:
                 matches = self.matcher({"image0": features, "image1": self.map_features})["matches"][0]
                 pairs = matches.cpu().numpy()
-        image_points = features["keypoints"][0].cpu().numpy().astype(np.float64)[pairs[:, 0]]
-        if to_image is not None and len(image_points):
-            image_points = cv2.perspectiveTransform(image_points.reshape(-1, 1, 2), to_image).reshape(-1, 2)
+        keypoints = features["keypoints"][0].cpu().numpy().astype(np.float64)
+        if to_image is not None and len(keypoints):
+            keypoints = cv2.perspectiveTransform(keypoints.reshape(-1, 1, 2), to_image).reshape(-1, 2)
+        image_points = keypoints[pairs[:, 0]]
         map_points = self.map_features["keypoints"][0].cpu().numpy().astype(np.float64)[pairs[:, 1]]
 
         solution = solve_pose(image_points, self.map.pixel_to_world(map_points), intrinsics)
-        return NavResult(solution.status, solution.pose, image_points, map_points, solution.inliers)
+        return NavResult(solution.status, solution.pose, image_points, map_points, solution.inliers, keypoints)
 
     def _keep_valid(self, features: dict, valid: np.ndarray) -> dict:
         """Only the keypoints that land where `valid` is true."""

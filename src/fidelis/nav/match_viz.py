@@ -1,8 +1,9 @@
 """A picture of one descent's matching: the camera image beside the orbital map, matches drawn.
 
 RANSAC's inliers in green, the matches it rejected in red, each line from a keypoint in
-the descent image to its match in the map. The map is scaled to the descent image's
-height. A failed descent gets a picture too: those are the ones worth looking at.
+the descent image to its match in the map; keypoints that found no match are blue dots.
+The map is scaled to the descent image's height. A failed descent gets a picture too:
+those are the ones worth looking at.
 
     uv run fidelis-match-viz config/jezero.yaml data/jezero 12 results/plain_mc/matches/seed_12.png
 
@@ -17,6 +18,7 @@ import numpy as np
 
 INLIER_BGR = (0, 200, 0)
 OUTLIER_BGR = (0, 0, 230)
+KEYPOINT_BGR = (255, 160, 0)  # keypoints with no match
 CAPTION_BGR = (0, 255, 255)
 
 
@@ -31,12 +33,23 @@ def draw_matches(
     map_points: np.ndarray,
     inliers: np.ndarray,
     caption: str = "",
+    image_keypoints: np.ndarray | None = None,
+    map_keypoints: np.ndarray | None = None,
 ) -> np.ndarray:
-    """A BGR uint8 canvas. Images are single-channel in [0, 1]; points are OpenCV pixels (x, y)."""
+    """A BGR uint8 canvas. Images are single-channel in [0, 1]; points are OpenCV pixels (x, y).
+
+    `image_keypoints` and `map_keypoints`, if given, are every keypoint on each side, matched
+    or not; they're drawn first, as single pixels, so matches sit on top.
+    """
     height, width = image.shape
     scale = height / map_image.shape[0]
     map_size = (round(map_image.shape[1] * scale), height)
     canvas = np.hstack([_grey_bgr(image), _grey_bgr(cv2.resize(map_image, map_size, interpolation=cv2.INTER_AREA))])
+    for points, offset, s in ((image_keypoints, 0, 1.0), (map_keypoints, width, scale)):
+        if points is not None and len(points):
+            cols, rows = np.round(np.asarray(points, float) * s + [offset, 0]).astype(int).T
+            keep = (cols >= 0) & (cols < canvas.shape[1]) & (rows >= 0) & (rows < height)
+            canvas[rows[keep], cols[keep]] = KEYPOINT_BGR
     ends = np.asarray(map_points, float) * scale + [width, 0]
     # Outliers first, so inliers stay visible on top.
     for keep, colour in ((~np.asarray(inliers, bool), OUTLIER_BGR), (np.asarray(inliers, bool), INLIER_BGR)):
@@ -64,11 +77,22 @@ def main() -> int:
 
     simulator = build_mesh_simulator(args.config, args.data_dir)
     run = simulator.run(draw(load_config(args.config), args.seed), args.fidelity)
-    r = run.record
-    error = "no fix" if r.error_m is None else f"error {r.error_m:.1f} m"
-    caption = f"seed {r.seed}, {r.fidelity}: {r.status}, {r.inlier_count}/{r.match_count} inliers, {error}"
+    record, nav = run.record, run.nav
+    error = "no fix" if record.error_m is None else f"error {record.error_m:.1f} m"
+    caption = (
+        f"seed {record.seed}, {record.fidelity}: {record.status}, {record.inlier_count}/{record.match_count}"
+        f" inliers, {error}; config {record.config_sha256[:8]}"
+    )
+    map_keypoints = simulator.navigator.map_features["keypoints"][0].cpu().numpy()
     canvas = draw_matches(
-        run.image, simulator.navigator.map.image, run.nav.image_points, run.nav.map_points, run.nav.inliers, caption
+        run.image,
+        simulator.navigator.map.image,
+        nav.image_points,
+        nav.map_points,
+        nav.inliers,
+        caption,
+        image_keypoints=nav.keypoints,
+        map_keypoints=map_keypoints,
     )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     tmp = args.out.with_name(args.out.stem + ".tmp" + args.out.suffix)

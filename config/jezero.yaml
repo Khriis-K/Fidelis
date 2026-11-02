@@ -126,7 +126,8 @@ simulation:
   # Path-tracing samples per pixel for the "mesh" fidelity. At 64 spp the render's own noise
   # was 1.2-1.6% of the median pixel against 1024 spp, and 64 spp took 0.053 s
   # (docs/benchmarks/mesh-render.md). 256 should halve that noise (Monte Carlo noise falls as
-  # 1/sqrt(spp); computed, not measured), keeping it below the camera noise drawn above.
+  # 1/sqrt(spp); computed, not measured). How it compares with the camera noise drawn above
+  # isn't known: that is a fraction of full scale, this a fraction of the median pixel.
   mesh_spp: 256
 
 # The first end-to-end estimate (src/fidelis/plain_mc.py): `snakemake plain_mc`.

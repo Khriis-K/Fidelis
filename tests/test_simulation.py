@@ -2,6 +2,7 @@
 and a ray-cast of it stands in for the mesh renderer. The GPU test at the end runs the
 real mesh renderer on Jezero."""
 
+import hashlib
 import json
 import math
 from dataclasses import asdict
@@ -16,7 +17,7 @@ from fidelis.nav.navigator import Navigator
 from fidelis.nav.orbital_map import OrbitalMap
 from fidelis.render.camera import CameraPose, Intrinsics
 from fidelis.scenario import Scenario
-from fidelis.simulation import SimulationRecord, Simulator, scenario_pose
+from fidelis.simulation import SimulationRecord, Simulator, file_sha256, scenario_pose
 
 REPO = Path(__file__).resolve().parents[1]
 LEFT, TOP = 4589000.0, 1094000.0
@@ -190,6 +191,16 @@ def test_a_run_keeps_the_camera_image_and_the_matches_for_replay(simulator):
     assert run.image.shape == (K.height, K.width)
     assert run.nav.match_count == run.record.match_count
     assert run.nav.inlier_count == run.record.inlier_count
+
+
+def test_every_record_names_the_config_it_ran_under(simulator, tmp_path):
+    # A seed reruns the same descent only under the same config: the record says which.
+    config = tmp_path / "scene.yaml"
+    config.write_text("scenario: {}\n")
+    digest = file_sha256(config)
+    assert digest == hashlib.sha256(config.read_bytes()).hexdigest()
+    sim = Simulator(simulator.renderers, simulator.navigator, K, config_sha256=digest)
+    assert sim.run(scenario(), "black").record.config_sha256 == digest
 
 
 def test_an_unknown_fidelity_is_a_caller_error(simulator):

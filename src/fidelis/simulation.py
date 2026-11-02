@@ -14,6 +14,7 @@ The navigator gets the true attitude: attitude-knowledge (IMU) error isn't model
 (issue #34, docs/benchmarks/navigator.md).
 """
 
+import hashlib
 import math
 import time
 from collections.abc import Callable
@@ -69,6 +70,8 @@ class SimulationRecord:
     cost_s: float  # wall clock for render, camera model and navigation; not scene or model loading
     gpu: str  # the device that did the work, "cpu" without one
     scenario: dict  # the scenario's inputs, without the seed
+    # SHA-256 of the scene config: the seed reruns this descent only under the same config.
+    config_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -79,10 +82,17 @@ class Run:
 
 
 class Simulator:
-    def __init__(self, renderers: dict[str, Renderer], navigator: Navigator, intrinsics: Intrinsics):
+    def __init__(
+        self,
+        renderers: dict[str, Renderer],
+        navigator: Navigator,
+        intrinsics: Intrinsics,
+        config_sha256: str | None = None,
+    ):
         self.renderers = renderers
         self.navigator = navigator
         self.intrinsics = intrinsics
+        self.config_sha256 = config_sha256
         self.gpu = torch.cuda.get_device_name() if navigator.device.startswith("cuda") else "cpu"
 
     def run(self, scenario: Scenario, fidelity: str) -> Run:
@@ -115,6 +125,7 @@ class Simulator:
             cost_s=cost,
             gpu=self.gpu,
             scenario=inputs,
+            config_sha256=self.config_sha256,
         )
         return Run(record, image, nav)
 
@@ -135,4 +146,9 @@ def build_mesh_simulator(config_path: Path, data_dir: Path, suns=None, device: s
     )
     renderer = MeshRenderer(data_dir / "mesh", suns, spp=scene["simulation"]["mesh_spp"])
     intrinsics = Intrinsics.from_fov(LCAM_PX, LCAM_PX, scene["scenario"]["camera_fov_deg"])
-    return Simulator({"mesh": renderer}, Navigator(orbital_map, device=device), intrinsics)
+    navigator = Navigator(orbital_map, device=device)
+    return Simulator({"mesh": renderer}, navigator, intrinsics, config_sha256=file_sha256(config_path))
+
+
+def file_sha256(path: Path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()

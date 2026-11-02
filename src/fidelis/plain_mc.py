@@ -14,18 +14,17 @@ and the config) and estimate.json.
 """
 
 import argparse
-import hashlib
 import json
 import math
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from statistics import NormalDist
+from statistics import NormalDist, median
 
 import yaml
 
 from fidelis.scenario import ScenarioConfig, draw, load_config
-from fidelis.simulation import SimulationRecord
+from fidelis.simulation import SimulationRecord, file_sha256
 
 
 def is_failure(record: SimulationRecord, r_m: float) -> bool:
@@ -113,10 +112,10 @@ def main() -> int:
         "fidelity": args.fidelity,
         "seeds": [seeds.start, seeds.stop - 1],
         "gpu": sorted({r.gpu for r in records}),
-        "median_cost_s": sorted(r.cost_s for r in records)[len(records) // 2],
+        "median_cost_s": median(r.cost_s for r in records),
         # Reruns need the same config: its hash says whether a later one still is.
         "config": str(args.config),
-        "config_sha256": hashlib.sha256(args.config.read_bytes()).hexdigest(),
+        "config_sha256": file_sha256(args.config),
         "r_note": "provisional: r will be set from the pilot study (#13), not from this run",
     }
     path = args.out_dir / "estimate.json"
