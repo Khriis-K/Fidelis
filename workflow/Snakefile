@@ -23,6 +23,9 @@ JEZERO = "data/jezero"
 localrules:
     preflight,
     jezero,
+    # CARC compute nodes have no internet, so downloads run where Snakemake was
+    # launched (a login node on CARC; see docs/carc.md).
+    download_mosaic,
 
 
 # Runs where Snakemake was launched (the CARC login node), with the same modules as
@@ -75,8 +78,6 @@ rule download_mosaic:
         url=lambda w: config["mosaics"][w.mosaic]["url"],
         tif=lambda w: f"{JEZERO}/raw/{w.mosaic}.tif",
         pin=lambda w: f"--sha256 {sha}" if (sha := config["mosaics"][w.mosaic]["sha256"]) else "",
-    resources:
-        runtime=180,  # minutes; the orthoimage is 6.9 GB
     shell:
         "fidelis-fetch {params.url} {params.tif} {params.pin} --record {output}"
 

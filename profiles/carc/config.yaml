@@ -16,7 +16,7 @@ default-resources:
 set-resources:
   - smoke:gpu_model=l40s
   # CPU-only data prep goes to `main`, off the gpu partition and its 100-job queue cap.
-  - download_mosaic:slurm_partition=main
+  # (download_mosaic is a localrule: compute nodes have no internet.)
   - jezero_tile:slurm_partition=main
   - jezero_matching_map:slurm_partition=main
 

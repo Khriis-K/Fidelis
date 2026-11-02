@@ -82,11 +82,33 @@ def test_jezero_plans_both_downloads_the_tile_and_the_matching_map(profile):
     assert len(re.findall(r"(?:local)?rule download_mosaic:", output)) == 2  # DTM and orthoimage
 
 
+def localrules() -> set[str]:
+    """Rules in the Snakefile's `localrules:` block. A dry run labels every job `rule`
+    under the SLURM executor, so it can't show which ones run locally."""
+    snakefile = (REPO / "workflow/Snakefile").read_text()
+    block = re.search(r"^localrules:\n((?:[ \t]+.*\n)+)", snakefile, re.MULTILINE)
+    assert block, "no localrules: block in workflow/Snakefile"
+    return set(re.findall(r"^[ \t]+(\w+),", block.group(1), re.MULTILINE))
+
+
+def test_downloads_run_locally_not_as_slurm_jobs():
+    # CARC compute nodes have no internet (docs/carc.md); a SLURM download job would fail.
+    assert "download_mosaic" in localrules()
+
+
+def test_localrules_lists_only_real_rules():
+    # Guards the parser above: a typo or a parse miss would make the download check meaningless.
+    rules = set(planned_jobs(dry_run("local", "jezero", "--forceall")))
+
+    assert localrules() == {"preflight", "jezero", "download_mosaic"}
+    assert localrules() <= rules
+
+
 def test_jezero_data_jobs_stay_off_the_gpu_partition():
     # CPU-only work on the gpu partition would wait in the GPU queue and count against its cap.
     jobs = planned_jobs(dry_run("carc", "jezero", "--forceall"))
 
-    for rule in JEZERO_RULES:
+    for rule in JEZERO_RULES - {"download_mosaic"}:  # downloads are localrules, never submitted
         assert jobs[rule].get("slurm_partition") != "gpu", rule
         assert int(jobs[rule].get("gpu", "0")) == 0, rule
 
