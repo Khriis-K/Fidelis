@@ -34,9 +34,9 @@ lvs_altitude_m:
   bottom: 2200
 
 tile:
-  # Perseverance's touchdown point, Octavia E. Butler Landing. Third-party sources give
-  # 18.4447 N, 77.4508 E; not yet checked against a JPL primary source, but it lies in
-  # the post-landing HiRISE image ESP_073912_1985 (centred 18.462 N, 77.392 E).
+  # Perseverance's touchdown point, Octavia E. Butler Landing. Way et al. 2022 (Mars 2020
+  # EDL flight reconstruction, Table 1) give 18.44463 N, 77.45088 E from HiRISE, within
+  # about 5 m of the value below.
   center_lon: 77.4508
   center_lat: 18.4447
   # Map metres, grown outward to a 12 m grid (whole mesh, texture and map pixels), so
@@ -68,3 +68,44 @@ matching_map:
       Orbiter, JGR 112, E05S04, doi:10.1029/2006JE002808; about 6 m/pixel from MRO's
       mapping orbit (PDS CTX instrument description). Cheng et al. 2021, section 2.1:
       CTX acquires "images at 6 m per pixel scale over a swath 30 km wide".
+
+# Per-descent random inputs (src/fidelis/scenario.py). Sources and reasoning:
+# docs/research/edl-dispersions-for-scenario-sampler.md. Every distribution is bounded,
+# and load_config refuses any whose worst case could see past the tile: the highest
+# altitude plus terrain_relief_m, at the largest tilt, through the image corner, from the
+# largest offset. On this 10 km tile that check, not Mars, caps tilt and offset well
+# below flight values; a CTX-ringed ~26 km scene would lift the cap (see that ticket).
+scenario:
+  # LCAM: 90 x 90 deg (Maki et al. 2020; docs/camera-conventions.md).
+  camera_fov_deg: 90
+  # DTM elevation spans -2652.1 to -2393.2 m over the tile (docs/benchmarks/terrain-mesh.md).
+  terrain_relief_m: 259
+  # Above the ground beneath the camera. Brackets the sourced handoff values: "approximately
+  # 2200m" (Johnson et al. 2022), back-shell separation 2276 m flown, final-fix image an
+  # inferred 2.36-2.44 km. Uniform is a Fidelis choice; no spread is published.
+  altitude_m: {dist: uniform, low: 2200, high: 2450}
+  # True position, ground metres from the tile centre. sd from the pre-flight 99% landing
+  # ellipse (7.1 x 6.5 km, Way et al. 2020) as sigma ~ 1.1 km. TILE-CLIPPED to +-400 m.
+  offset_east_m: {dist: truncnorm, mean: 0, sd: 1100, low: -400, high: 400}
+  offset_north_m: {dist: truncnorm, mean: 0, sd: 1100, low: -400, high: 400}
+  # Off nadir. Flight pitch swung about -12 to +5 deg; pre-flight simulations averaged
+  # 7-18 deg (Johnson et al. 2020, 2022, read from plots). TILE-CLIPPED to 3 deg.
+  tilt_deg: {dist: uniform, low: 0, high: 3}
+  # No source gives either; heading drifted ~70 deg in 35 s on the parachute. Fidelis choice.
+  tilt_azimuth_deg: {dist: uniform, low: 0, high: 360}
+  heading_deg: {dist: uniform, low: 0, high: 360}
+  # Fraction of full scale: ~0.75 DN at the flight mean of 60 DN up to the < 2 DN design
+  # figure (computed from Maki et al. 2020 Table 5).
+  noise_sd: {dist: uniform, low: 0.002, high: 0.008}
+  # Up to the ~0.5 px of the 1 ms exposure requirement at 50 deg/s (computed); flight's
+  # shorter exposures blurred far less. A sensitivity knob more than a flight value.
+  blur_px: {dist: uniform, low: 0, high: 0.5}
+  # A linear blur looks the same both ways, so half a turn covers every direction.
+  blur_angle_deg: {dist: uniform, low: 0, high: 180}
+  # Flight images came out at 0.6x their exposure target; LVS tolerated 1/4x to 4x.
+  # The range around the flight value is a Fidelis choice.
+  exposure_gain: {dist: uniform, low: 0.5, high: 1.5}
+  # Five pre-rendered sun angles; the splat ticket (#20) defines them and must keep five.
+  # Suggested: the landing-day sun (257 deg az, 40 deg el) plus the corners of LVS's design
+  # box, 240-310 deg az by 25-55 deg el.
+  sun_index: {dist: integers, low: 0, high: 4}

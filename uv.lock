@@ -305,6 +305,7 @@ dev = [
     { name = "pytest" },
     { name = "pyyaml" },
     { name = "ruff" },
+    { name = "scipy" },
 ]
 workflow = [
     { name = "snakemake" },
@@ -330,6 +331,7 @@ dev = [
     { name = "pytest", specifier = ">=8" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "ruff", specifier = ">=0.8" },
+    { name = "scipy", specifier = ">=1.18.1" },
 ]
 workflow = [
     { name = "snakemake", specifier = ">=9.27.1" },

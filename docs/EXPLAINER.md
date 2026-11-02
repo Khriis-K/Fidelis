@@ -54,6 +54,10 @@ A refresher for explaining Fidelis to recruiters. Plain English first, key techn
 
 **Camera pose and intrinsics**: a pose says where a camera is and which way it points (a position plus a rotation). Intrinsics say how it maps directions to pixels: focal length and the principal point, where the optical axis hits the image. *In Fidelis:* the renderer, splat training and the navigator all have to mean the same thing by a pose, or a perfect navigator would still report errors. Everything uses OpenCV's convention (x right, y down, z forward), written down in `docs/camera-conventions.md`. The descent camera copies Perseverance's LCAM: 1024 × 1024 pixels, 90° field of view (Maki et al. 2020).
 
+**Seeded random sampling**: a computer's "random" numbers come from a formula started by a number called the seed; the same seed always produces the same numbers. *In Fidelis:* every simulated descent draws its conditions (position, altitude, tilt, heading, noise, blur, exposure, sun angle) from a recorded seed, so any single descent can be regenerated exactly to inspect why it failed. Each condition gets its own random stream, keyed by the seed and the condition's name, so changing how tilt is drawn doesn't silently reshuffle every other condition of an existing seed.
+
+**Knowledge error vs true dispersion**: two different ways a lander can be "off". True dispersion is where the vehicle actually is, compared with where it was aimed (Perseverance: about 1.1 km standard deviation before flight). Knowledge error is how wrong the vehicle's *own belief* about its position is (designed for up to 3.2 km; 137 m in flight). *In Fidelis:* the scenario sampler draws the true position, because that decides what ground the camera sees. Knowledge error only matters if the navigator narrows its search around a prior guess, which it doesn't yet.
+
 ## Challenges and how we solved them
 
 <!-- Format: ### Title — then: the problem, how we noticed, what we did, what it taught us. -->
@@ -108,6 +112,16 @@ A refresher for explaining Fidelis to recruiters. Plain English first, key techn
 
 **What it taught us.** Check the operating envelope (here, the real mission altitudes) before sizing the test scene. Never assume map units are ground units. And when a GPU tool can fail silently, add a cheap check on its output instead of trusting the absence of an error.
 
+### A map too small for a tilting camera
+
+**The problem.** Each simulated descent tilts the camera and shifts it sideways at random, as Perseverance's did on its parachute. But the terrain only exists inside our 10 km tile, so a view that reaches past the edge renders black ground, and the navigator would "fail" because the map ran out, not because navigation is hard. That would quietly inflate the failure probability.
+
+**How we noticed.** The sampler refuses any configuration whose worst-case draw could see past the tile. Working that case through properly (the image corner reaches about 1.4 times farther than its edge, the camera can turn so a corner points outward, and lower ground widens the view) left only a few hundred metres of slack, not the 2.5 km a straight-down estimate suggested. Research into the real descent then showed Perseverance's camera swung about −12° to +5° off vertical, and pre-flight simulations averaged 7–18°. Our map fits 3°.
+
+**What we did.** We shipped the sampler with tilt capped at 3° and offsets at ±400 m, labelled in the config as limits of the map, not of Mars, and kept the researched values next to them. We checked whether a bigger map exists: the sharp HiRISE data tops out around 12 km anywhere, but USGS's coarser CTX terrain (the map Perseverance actually carried) covers a hole-free 27.7 km square on the same grid, with heights within about half a metre of HiRISE. Building a wider scene with a CTX outer ring is its own ticket (#33); when it lands, widening tilt is a config change.
+
+**What it taught us.** Check the worst case, not the typical one, and check it with the real geometry: the corner of the image, not its edge. And keep distributions in config with their sources beside them, so a constraint imposed by our tooling is visible as such rather than mistaken for physics.
+
 ## Headline results
 
 None yet. Numbers go here only once they're committed in `docs/benchmarks/` or `docs/adr/`, each with its caveat.
@@ -122,6 +136,6 @@ None yet. Numbers go here only once they're committed in `docs/benchmarks/` or `
 
 - **Rendered shadows are too dark, and the brightness isn't physical.** The renderer has a sun but no sky, so shadows only get light bounced off nearby terrain; on Mars, dusty sky light fills them in. And the orthoimage's pixel values are tone-matched brightness, not calibrated reflectance, so the renderer's output is relative brightness, not physical radiance.
 
-- **The tile leaves little room at the top of the descent.** The 10 km tile is 9.5 km of ground east–west. A straight-down view from 4.2 km covers 8.4 km of it, so it fits only within about 3.5° of tilt or 550 m of the centre, pointing north-up; turning it more than about 8° swings a corner off the terrain. From 2.2 km there's about 2.5 km of room. The data runs out not far beyond this square, so a bigger tile centred on the landing site would have holes.
+- **The tile leaves little room at the top of the descent.** The 10 km tile is 9.5 km of ground east–west. A straight-down view from 4.2 km covers 8.4 km of it, so it fits only within about 3.5° of tilt or 550 m of the centre, pointing north-up; turning it more than about 8° swings a corner off the terrain. From 2.2 km there's about 2.5 km of room. The data runs out not far beyond this square, so a bigger tile centred on the landing site would have holes. Because of this, the scenario sampler caps camera tilt at 3° and sideways offset at ±400 m, well below Perseverance's real swing (about −12° to +5°), so descents are probably easier than flight and the failure probability biased low (not yet measured). A wider scene with a coarser CTX outer ring (#33) would lift the cap.
 
 - **The terrain is flat; Mars is curved.** The tile is a flat map, while the real surface falls away from it by 3.7 m at 5 km from the centre. That's below a descent-camera pixel at those heights, and it isn't modelled.
