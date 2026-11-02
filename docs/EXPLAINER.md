@@ -108,4 +108,6 @@ None yet. Numbers go here only once they're committed in `docs/benchmarks/` or `
 
 - **Rendered shadows are too dark, and the brightness isn't physical.** The renderer has a sun but no sky, so shadows only get light bounced off nearby terrain; on Mars, dusty sky light fills them in. And the orthoimage's pixel values are tone-matched brightness, not calibrated reflectance, so the renderer's output is relative brightness, not physical radiance.
 
-- **The 2 km tile limits camera altitude.** The descent camera's 90° field of view sees twice its altitude across, so above about 1 km it sees past the edge of the terrain model. LVS imaged during parachute descent, at altitudes we haven't sourced yet. If those are above 1 km, either the tile grows or the simulated descents stay lower than the real ones (`docs/benchmarks/mesh-render.md`).
+- **The 2 km tile limits camera altitude.** The descent camera's 90° field of view sees twice its altitude across, so above about 1 km it sees past the edge of the terrain model. Perseverance's LVS imaged from 4.2 km down to 2.2 km (NASA/JPL press kit), so the tile has to grow to about 10 km. That fits on the laptop only at coarser detail (4 m), which is still finer than a descent pixel at those heights (`docs/research/descent-altitude-and-tile-size.md`).
+
+- **The mesh is 5.4% too wide east–west (not yet fixed).** The USGS map projection stretches east–west distances by 1/cos(latitude) at Jezero, and the mesh treats map metres as ground metres.

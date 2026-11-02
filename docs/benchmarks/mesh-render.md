@@ -19,7 +19,7 @@ Pose and pixel conventions are in `docs/camera-conventions.md`.
 
 The target camera is LCAM-like: **1024 × 1024 px, 90° field of view** (Maki et al. 2020; see `docs/camera-conventions.md`). Test views are nadir, north up, 900 m above the tile's mean ground (−2571.8 m). A 90° camera sees 2 × altitude across, so 900 m covers 1.8 km of the 2.0 km mesh.
 
-**Altitude limit.** On this 2 km tile, a nadir 90° camera above about 1000 m sees past the mesh's edge. LVS took its images during parachute descent, but we don't have a sourced altitude range yet: Maki et al. 2020 doesn't give one, and Johnson et al.'s LVS papers are metadata-only on NTRS. Descents above ~1 km would need a bigger tile, or would have to accept black borders that the navigator might match on. This needs a decision before the seeded scenario sampler (issue #6) fixes its altitude range.
+**Altitude limit.** On this 2 km tile, a nadir 90° camera above about 1000 m sees past the mesh's edge. LVS worked from 4.2 km down to 2.2 km above the ground (NASA/JPL landing press kit), entirely above that limit. A 10 km tile at 4 m mesh spacing fits on the laptop and renders at the same speed. See `docs/research/descent-altitude-and-tile-size.md`. This needs a decision before the seeded scenario sampler (issue #6) fixes its altitude range.
 
 ## Render time (acceptance: time per image at the target resolution)
 
