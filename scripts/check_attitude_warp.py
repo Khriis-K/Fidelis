@@ -83,3 +83,17 @@ covered = cv2.warpAffine(
 )
 result = navigator.locate(np.where(covered > 0, twice, 0), f.K)
 print(f"\nNorth-up resampled 45 deg and back, no warp: {np.linalg.norm(result.position - truth):.3f} m")
+
+# Attitude-knowledge error: the believed attitude is the true one turned by `e` degrees
+# about world up (a heading error) or world east (a tilt error). Each row compares with
+# the same view's perfect-attitude row (e = 0), not with north-up.
+print("\nAttitude error (bilinear)")
+print("| View heading | Error axis | Error (deg) | Status | Inliers | Position error (m) |\n|---|---|---|---|---|---|")
+for heading in (0, 45):
+    view = np.clip(f.nadir_view(flat_map, heading), 0, 1)
+    for axis_name, axis in (("heading", [0, 0, 1]), ("tilt", [1, 0, 0])):
+        for e in (0, 1, 3, 10, 20):
+            turn = cv2.Rodrigues(np.radians(e) * np.array(axis, dtype=np.float64))[0]
+            result = navigator.locate(view, f.K, turn @ f.attitude(heading))
+            err = None if result.pose is None else float(np.linalg.norm(result.position - truth))
+            print(f"| {heading} | {axis_name} | {e} | {result.status} | {result.inlier_count} | {fmt(err)} |")
