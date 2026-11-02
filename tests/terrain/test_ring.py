@@ -18,7 +18,7 @@ EAST_SCALE = 0.9486
 # don't fall on ring grid lines (like the real mosaics, which are off by a fraction of a pixel).
 RING_LEFT, RING_TOP, RING_RES, RING_N = 4585000.0, 1098000.0, 20.0, 30
 IN_LEFT, IN_TOP, IN_RES, IN_N = RING_LEFT + 203.25, RING_TOP - 197.5, 4.0, 25
-ORIGIN = (IN_LEFT + IN_N * IN_RES / 2, IN_TOP - IN_N * IN_RES / 2)
+ORIGIN = (IN_LEFT + IN_N * IN_RES / 2, IN_TOP - IN_N * IN_RES / 2)  # the tile's centre, as fidelis-mesh uses
 
 
 @pytest.fixture(scope="module")
@@ -37,7 +37,7 @@ def grids():
 @pytest.fixture(scope="module")
 def meshes(grids):
     ring, ring_t, inner, inner_t = grids
-    inner_mesh = grid_mesh(inner, inner_t, EAST_SCALE, origin=ORIGIN, curvature_radius_m=MARS_RADIUS_M)[:3]
+    inner_mesh = grid_mesh(inner, inner_t, EAST_SCALE, curvature_radius_m=MARS_RADIUS_M)[:3]
     ring_m = ring_mesh(ring, ring_t, inner, inner_t, ORIGIN, EAST_SCALE, MARS_RADIUS_M)
     return inner_mesh, ring_m
 

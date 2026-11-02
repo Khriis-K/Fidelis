@@ -1,7 +1,31 @@
-"""Where a north-up raster's pixels are, and its values between them."""
+"""North-up rasters: reading and writing them, where their pixels are, and values between them."""
+
+from pathlib import Path
 
 import numpy as np
+import rasterio
 from rasterio.transform import Affine
+
+# Internal tiling a source may carry; a new raster of a different shape may not fit it.
+_TILING_KEYS = ("blockxsize", "blockysize", "tiled")
+
+
+def read_raster(path: Path) -> tuple[np.ndarray, Affine, dict]:
+    """Band 1, its geotransform, and the profile to write a raster like it."""
+    with rasterio.open(path) as src:
+        return src.read(1), src.transform, src.profile
+
+
+def write_raster(path: Path, data: np.ndarray, profile: dict) -> None:
+    """Write band 1 to a temp file, then rename it into place; the profile's shape follows data."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    profile = {k: v for k, v in profile.items() if k not in _TILING_KEYS}
+    profile |= {"width": data.shape[1], "height": data.shape[0]}
+    tmp = path.with_name(path.stem + ".tmp" + path.suffix)
+    with rasterio.open(tmp, "w", **profile) as dst:
+        dst.write(data, 1)
+    tmp.replace(path)
 
 
 def centres(transform: Affine, shape: tuple[int, int]) -> tuple[np.ndarray, np.ndarray]:

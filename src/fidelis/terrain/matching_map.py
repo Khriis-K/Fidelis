@@ -30,7 +30,7 @@ import rasterio
 import yaml
 from rasterio.transform import Affine, from_origin
 
-from fidelis.terrain.raster import bilinear, centres
+from fidelis.terrain.raster import bilinear, centres, write_raster
 
 # Snap tolerance: float noise in metres, far below any pixel size.
 EPS = 1e-6
@@ -133,15 +133,7 @@ def build_scene_map(inner_ortho: Path, ring_ortho: Path, target_res_m: float, ds
         raise ValueError(f"{inner_ortho} reaches past the ring's data in {ring_ortho}")
     image[row0 : row0 + inner.shape[0], col0 : col0 + inner.shape[1]] = inner
 
-    profile = profile | {"width": shape[1], "height": shape[0], "transform": transform}
-    for key in ("blockxsize", "blockysize", "tiled"):
-        profile.pop(key, None)
-    dst_path = Path(dst_path)
-    dst_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dst_path.with_name(dst_path.stem + ".tmp" + dst_path.suffix)
-    with rasterio.open(tmp, "w", **profile) as dst:
-        dst.write(image, 1)
-    tmp.replace(dst_path)
+    write_raster(dst_path, image, profile | {"transform": transform})
     return {
         "source": str(inner_ortho),
         "ring_source": str(ring_ortho),
@@ -156,23 +148,23 @@ def build_scene_map(inner_ortho: Path, ring_ortho: Path, target_res_m: float, ds
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("config", type=Path)
-    parser.add_argument("tile_dir", type=Path, help="ortho.tif and tile.json; also ring_ortho.tif if a ring")
+    parser.add_argument("scene_dir", type=Path, help="ortho.tif and tile.json; also ring_ortho.tif if a ring")
     parser.add_argument("out", type=Path)
     args = parser.parse_args()
 
     resolutions = yaml.safe_load(args.config.read_text())["matching_map"]
     lvs_m = resolutions["lvs_map_resolution"]["value_m"]
     require_same_resolution(lvs_m, resolutions["ctx_ground_resolution"]["value_m"])
-    if (args.tile_dir / "ring.json").exists():
-        info = build_scene_map(args.tile_dir / "ortho.tif", args.tile_dir / "ring_ortho.tif", lvs_m, args.out)
+    if (args.scene_dir / "ring.json").exists():
+        info = build_scene_map(args.scene_dir / "ortho.tif", args.scene_dir / "ring_ortho.tif", lvs_m, args.out)
     else:
-        info = build_matching_map(args.tile_dir / "ortho.tif", lvs_m, args.out)
+        info = build_matching_map(args.scene_dir / "ortho.tif", lvs_m, args.out)
     # The factor's provenance travels with the map.
     info["lvs_map_resolution"] = resolutions["lvs_map_resolution"]
     info["ctx_ground_resolution"] = resolutions["ctx_ground_resolution"]
     # Pixels are square in map metres, not on the ground: the projection stretches
     # east-west by 1/cos(latitude), so a matcher working in ground metres needs this.
-    scale = json.loads((args.tile_dir / "tile.json").read_text())["east_west_ground_scale"]
+    scale = json.loads((args.scene_dir / "tile.json").read_text())["east_west_ground_scale"]
     info["east_west_ground_scale"] = scale
     info["ground_resolution_m"] = {"east_west": info["resolution_m"] * scale, "north_south": info["resolution_m"]}
     record = args.out.with_suffix(".json")

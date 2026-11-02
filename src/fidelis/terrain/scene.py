@@ -37,7 +37,7 @@ import yaml
 from rasterio.transform import Affine
 
 from fidelis.terrain.matching_map import block_mean, downsample_factor
-from fidelis.terrain.raster import bilinear, centres
+from fidelis.terrain.raster import bilinear, centres, read_raster, write_raster
 from fidelis.terrain.tile import Bounds, cut_tile, grid_step, tile_bounds
 
 # After blending, the tile's outermost heights are CTX's own, stored as float32: only
@@ -89,20 +89,8 @@ def ring_bounds(
     return tile_bounds(*centre, size_m + ring_res_m, origin, step_m=step)
 
 
-def _read(path: Path):
-    with rasterio.open(path) as src:
-        return src.read(1), src.transform, src.profile
-
-
-def _write(path: Path, data: np.ndarray, profile: dict) -> None:
-    profile = {k: v for k, v in profile.items() if k not in ("blockxsize", "blockysize", "tiled")}
-    tmp = path.with_name(path.stem + ".tmp" + path.suffix)
-    with rasterio.open(tmp, "w", **profile) as dst:
-        dst.write(data, 1)
-    tmp.replace(path)
-
-
-def _write_json(path: Path, record: dict) -> None:
+def write_json(path: Path, record: dict) -> None:
+    """Indented JSON, written to a temp file and renamed into place."""
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(record, indent=2) + "\n")
     tmp.replace(path)
@@ -115,8 +103,8 @@ def blend_scene(
     tile_dir, out_dir = Path(tile_dir), Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     tile = json.loads((tile_dir / "tile.json").read_text())
-    heights, dtm_t, dtm_profile = _read(tile_dir / "dtm.tif")
-    texture, tex_t, tex_profile = _read(tile_dir / "ortho.tif")
+    heights, dtm_t, dtm_profile = read_raster(tile_dir / "dtm.tif")
+    texture, tex_t, tex_profile = read_raster(tile_dir / "ortho.tif")
     rows, cols = heights.shape
     left, top = dtm_t.c, dtm_t.f
     right, bottom = left + cols * dtm_t.a, top + rows * dtm_t.e
@@ -133,8 +121,8 @@ def blend_scene(
     if ring_dtm["nodata_pixels"]:
         raise ValueError(f"the CTX DTM has {ring_dtm['nodata_pixels']} nodata pixels under {bounds}")
     ring_ortho = cut_tile(ctx_ortho, bounds, out_dir / "ring_ortho.tif")
-    ring_heights, ring_t, _ = _read(out_dir / "ring_dtm.tif")
-    ring_image, ring_image_t, ring_profile = _read(out_dir / "ring_ortho.tif")
+    ring_heights, ring_t, _ = read_raster(out_dir / "ring_dtm.tif")
+    ring_image, ring_image_t, ring_profile = read_raster(out_dir / "ring_ortho.tif")
 
     # Heights: CTX at the edge, HiRISE a band inside.
     mx, my = centres(dtm_t, heights.shape)
@@ -161,9 +149,9 @@ def blend_scene(
     hirise = np.where(texture == 0, ctx_texture, texture) if nodata == 0 else texture
     eased = np.clip(np.rint(w_tex * hirise + (1 - w_tex) * ctx_texture), 1, 255).astype(np.uint8)
 
-    _write(out_dir / "dtm.tif", blended, dtm_profile)
-    _write(out_dir / "ortho.tif", eased, tex_profile)
-    _write(out_dir / "ring_ortho.tif", matched, ring_profile)
+    write_raster(out_dir / "dtm.tif", blended, dtm_profile)
+    write_raster(out_dir / "ortho.tif", eased, tex_profile)
+    write_raster(out_dir / "ring_ortho.tif", matched, ring_profile)
 
     # For the sampler's check that views stay on the terrain: with the camera anywhere over
     # the tile, the ground at a view's edge is at most this much lower than beneath it. As
@@ -187,8 +175,8 @@ def blend_scene(
         "drop_below_tile_m": float(inner_z.max() - lowest),
     }
     tile = tile | {"curvature_radius_m": radius_m, "blended_from": str(tile_dir)}
-    _write_json(out_dir / "tile.json", tile)
-    _write_json(out_dir / "ring.json", ring)
+    write_json(out_dir / "tile.json", tile)
+    write_json(out_dir / "ring.json", ring)
     return {"tile": tile, "ring": ring}
 
 

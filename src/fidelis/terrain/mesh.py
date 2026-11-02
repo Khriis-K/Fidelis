@@ -30,9 +30,9 @@ import cv2
 import numpy as np
 import rasterio
 
+from fidelis.terrain.matching_map import EPS
 from fidelis.terrain.raster import centres
-from fidelis.terrain.scene import to_local
-from fidelis.terrain.tile import EPS
+from fidelis.terrain.scene import to_local, write_json
 
 # Vertex heights are DTM samples stored as float32: rounding, not modelling, is the error.
 ELEVATION_TOLERANCE_M = 1e-3
@@ -47,19 +47,14 @@ def grid_mesh(
     heights: np.ndarray,
     transform: rasterio.Affine,
     east_scale: float,
-    origin: tuple[float, float] | None = None,
     curvature_radius_m: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list]:
-    """Positions (local ground metres), UVs and triangles for a north-up height grid; also the origin.
-
-    The origin defaults to the grid's centre.
-    """
+    """Positions (local ground metres), UVs and triangles for a north-up height grid; also the origin (its centre)."""
     rows, cols = heights.shape
     x, y = centres(transform, heights.shape)
     left, top = transform.c, transform.f
     right, bottom = left + cols * transform.a, top + rows * transform.e
-    if origin is None:
-        origin = [(left + right) / 2, (bottom + top) / 2]
+    origin = [(left + right) / 2, (bottom + top) / 2]
 
     positions = to_local(x, y, heights, origin, east_scale, curvature_radius_m).reshape(-1, 3)
     uvs = np.stack([(x - left) / (right - left), (y - bottom) / (top - bottom)], axis=-1).reshape(-1, 2)
@@ -136,14 +131,8 @@ def build_terrain_mesh(
         "face_count": len(faces),
         "elevation_tolerance_m": ELEVATION_TOLERANCE_M,
     }
-    _write_record(out_dir, record)
+    write_json(out_dir / "mesh.json", record)
     return record
-
-
-def _write_record(out_dir: Path, record: dict) -> None:
-    tmp = out_dir / "mesh.json.tmp"
-    tmp.write_text(json.dumps(record, indent=2) + "\n")
-    tmp.replace(out_dir / "mesh.json")
 
 
 def mitsuba_shape(mesh_dir: Path, ply: str = "mesh.ply", texture: str = "texture.png") -> dict:
@@ -210,7 +199,7 @@ def main() -> int:
             record["east_scale"],
             radius,
         )
-        _write_record(args.out_dir, record)
+        write_json(args.out_dir / "mesh.json", record)
         ring = record["ring"]
         print(f"ring {ring['vertex_count']} vertices, {ring['face_count']} triangles")
     return 0

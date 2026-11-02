@@ -18,13 +18,13 @@ import numpy as np
 import rasterio
 from rasterio.transform import Affine
 
+from fidelis.terrain.matching_map import EPS
 from fidelis.terrain.mesh import write_ply
 from fidelis.terrain.raster import centres
 from fidelis.terrain.scene import to_local
-from fidelis.terrain.tile import EPS
 
 
-def _zip(a: np.ndarray, ta: np.ndarray, b: np.ndarray, tb: np.ndarray) -> list[tuple[int, int, int]]:
+def _stitch_chains(a: np.ndarray, ta: np.ndarray, b: np.ndarray, tb: np.ndarray) -> list[tuple[int, int, int]]:
     """Triangles between two vertex chains running the same way along parallel lines.
 
     Steps along whichever chain's next vertex comes first (by t, distance along the
@@ -109,7 +109,7 @@ def ring_mesh(
         a, b = copy_index[ar, ac], idx[br, bc]
         # Distance along the side: east, north, west, south in turn.
         axis, sign = (0, 1, 0, 1)[side], (1, 1, -1, -1)[side]
-        stitch += _zip(a, sign * positions[a, axis], b, sign * positions[b, axis])
+        stitch += _stitch_chains(a, sign * positions[a, axis], b, sign * positions[b, axis])
     stitch = np.array(stitch)
     # Wind every stitch triangle counter-clockwise seen from above, so normals point up.
     p = positions[stitch][..., :2].astype(np.float64)
