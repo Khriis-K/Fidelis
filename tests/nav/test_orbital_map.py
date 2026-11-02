@@ -60,6 +60,14 @@ def test_elevation_comes_from_the_dtm_beneath_the_map_pixel_not_the_dtm_pixel_wi
     np.testing.assert_allclose(world[:, 2], plane(mx, my), atol=1e-3)
 
 
+def test_ground_height_is_the_dtm_beneath_a_world_position():
+    # World east is ground metres: back to map metres it grows by 1 / east_scale. A slip
+    # in that (or in the origin) moves the lookup across the tilted plane by metres.
+    for east, north in [(0.0, 0.0), (-60.0, 35.0), (40.0, -25.0)]:
+        mx, my = east / EAST_SCALE + ORIGIN[0], north + ORIGIN[1]
+        assert make_map().ground_height(east, north) == pytest.approx(plane(mx, my), abs=1e-3)
+
+
 def test_an_empty_set_of_pixels_gives_an_empty_set_of_points():
     assert make_map().pixel_to_world(np.zeros((0, 2))).shape == (0, 3)
 

@@ -64,6 +64,12 @@ A refresher for explaining Fidelis to recruiters. Plain English first, key techn
 
 **Knowledge error vs true dispersion**: two different ways a lander can be "off". True dispersion is where the vehicle actually is, compared with where it was aimed (Perseverance: about 1.1 km standard deviation before flight). Knowledge error is how wrong the vehicle's *own belief* about its position is (designed for up to 3.2 km; 137 m in flight). *In Fidelis:* the scenario sampler draws the true position, because that decides what ground the camera sees. Knowledge error only matters if the navigator narrows its search around a prior guess, which it doesn't yet.
 
+**The simulation interface (a "seam")**: one function that everything else talks to. Give it one scenario (a seed's random conditions) and a fidelity level, and it returns a record: where the camera really was, where the navigator thought it was, the error between them, how many matches and inliers backed the fix, how long it took and on which GPU. *In Fidelis:* the Monte Carlo layer, the tests and the match pictures all go through `Simulator.run`, so swapping the renderer (mesh now, Gaussian splats later) changes nothing above it. A navigator that gives up returns a failure record instead of crashing the run.
+
+**Camera model: exposure, motion blur, sensor noise**: a renderer produces perfect light; a real camera smears it while the shutter is open (motion blur), scales it by how long the shutter was open (exposure), adds electronic noise, and clips anything brighter than its maximum. *In Fidelis:* every render goes through those steps with the scenario's own blur, exposure error and noise level, and the noise is drawn from the scenario's seed so a rerun is identical. Perseverance's camera had no auto-exposure, so "exposure gain" is how far off the pre-set exposure was.
+
+**Confidence interval for a failure rate (Wilson interval)**: with 1 failure in 20 tries, "5%" alone hides how unsure that is. A confidence interval gives the range of true rates the data can't rule out. The textbook formula breaks for rare events: zero failures gives an interval of exactly [0, 0], which claims certainty from 20 samples. Wilson's interval doesn't: zero failures in 20 still allows up to about 16%. *In Fidelis:* every plain Monte Carlo estimate is reported with a 95% Wilson interval.
+
 ## Challenges and how we solved them
 
 <!-- Format: ### Title — then: the problem, how we noticed, what we did, what it taught us. -->
@@ -150,7 +156,7 @@ A refresher for explaining Fidelis to recruiters. Plain English first, key techn
 
 ## Headline results
 
-None yet. Numbers go here only once they're committed in `docs/benchmarks/` or `docs/adr/`, each with its caveat.
+None yet. The end-to-end plain Monte Carlo command exists (`snakemake plain_mc`), but its first run hasn't been made. Numbers go here only once they're committed in `docs/benchmarks/` or `docs/adr/`, each with its caveat.
 
 ## Honest limitations
 
@@ -171,5 +177,9 @@ None yet. Numbers go here only once they're committed in `docs/benchmarks/` or `
 - **"Sun matching the map" is our interpretation.** The map's photo has HiRISE's own lighting baked in, and no sun angle reproduces it exactly. We used an overhead sun, which adds the least shading on top, as the closest stand-in. That's a judgment call, not a literal match.
 
 - **About 1.9 m of the perfect-conditions error is unexplained.** Near 2.2 km the fix sits 1.88 m off; near 4.2 km, 0.63 m. It's far below the 40 m that matters, so it wasn't chased. But it's big enough to hide a half-pixel coordinate bug from a test at that altitude alone (mutation testing caught exactly that), which is why the GPU test checks both ends of the band.
+
+- **The failure threshold r is provisional.** The first plain Monte Carlo command counts a descent as failed beyond 12 m (two 6 m map pixels), a placeholder we chose until the pilot study sets r so that 2–10% of descents fail. Any failure rate quoted before then is at that placeholder, and the outputs say so.
+
+- **Exposure is set from each image, not from a radiometric prediction.** Perseverance's exposure was fixed in advance from predictions. Our renderer's brightness isn't physical, so the "correct" exposure is taken from the image itself (its brightest 0.1% at full scale), and the scenario's exposure gain is the error on top. That's a stand-in for a prediction that was right before the error, not a model of how the prediction was made.
 
 - **The terrain is flat; Mars is curved.** The tile is a flat map, while the real surface falls away from it by 3.7 m at 5 km from the centre. That's below a descent-camera pixel at those heights, and it isn't modelled.

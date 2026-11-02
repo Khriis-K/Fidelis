@@ -127,3 +127,40 @@ rule jezero_matching_map:
         mem_mb=4000,
     shell:
         f"fidelis-matching-map config/jezero.yaml {JEZERO}/tile {{output[0]}}"
+
+# The first end-to-end estimate: N seeded descents through the mesh renderer and the
+# navigator, then P(fail) with a Wilson interval at the config's PROVISIONAL r. Each
+# record reruns from its seed. `snakemake plain_mc`.
+rule plain_mc:
+    input:
+        rules.jezero.input,
+        "config/jezero.yaml",
+    output:
+        "results/plain_mc/records.jsonl",
+        "results/plain_mc/estimate.json",
+    resources:
+        gpu=1,
+        cpus_per_task=4,
+        mem_mb=16000,
+        runtime=60,
+    shell:
+        f"fidelis-plain-mc config/jezero.yaml {JEZERO} results/plain_mc"
+
+
+# The match picture for any seed, rerun from the config:
+# `snakemake results/plain_mc/matches/seed_12.png`.
+rule match_viz:
+    input:
+        rules.jezero.input,
+        "config/jezero.yaml",
+    output:
+        "results/plain_mc/matches/seed_{seed}.png",
+    wildcard_constraints:
+        seed=r"\d+",
+    resources:
+        gpu=1,
+        cpus_per_task=4,
+        mem_mb=16000,
+        runtime=20,
+    shell:
+        f"fidelis-match-viz config/jezero.yaml {JEZERO} {{wildcards.seed}} {{output}}"

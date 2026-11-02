@@ -110,3 +110,30 @@ scenario:
   # Suggested: the landing-day sun (257 deg az, 40 deg el) plus the corners of LVS's design
   # box, 240-310 deg az by 25-55 deg el.
   sun_index: {dist: integers, low: 0, high: 4}
+
+# The sun angles the mesh renderer lights the scene with; scenario.sun_index picks one,
+# so there must be as many as sun_index can draw. These are the five suggested above: the
+# landing-day sun plus the corners of LVS's design box. The splat ticket (#20) may revise them.
+suns:
+  - {azimuth_deg: 257, elevation_deg: 40}
+  - {azimuth_deg: 240, elevation_deg: 25}
+  - {azimuth_deg: 240, elevation_deg: 55}
+  - {azimuth_deg: 310, elevation_deg: 25}
+  - {azimuth_deg: 310, elevation_deg: 55}
+
+# The simulation interface (src/fidelis/simulation.py).
+simulation:
+  # Path-tracing samples per pixel for the "mesh" fidelity. At 64 spp the render's own noise
+  # was 1.2-1.6% of the median pixel against 1024 spp, and 64 spp took 0.053 s
+  # (docs/benchmarks/mesh-render.md). 256 should halve that noise (Monte Carlo noise falls as
+  # 1/sqrt(spp); computed, not measured), keeping it below the camera noise drawn above.
+  mesh_spp: 256
+
+# The first end-to-end estimate (src/fidelis/plain_mc.py): `snakemake plain_mc`.
+plain_mc:
+  samples: 20
+  # PROVISIONAL. The real r comes from the pilot study (#13), set so that 2-10% of descents
+  # fail. Until then: two of the 6 m CTX-like map pixels, a Fidelis choice. Perfect-conditions
+  # fixes land within 1.9 m (docs/benchmarks/navigator.md), so 12 m marks a fix that's gone
+  # wrong rather than merely imprecise. Not LVS's 40 m target, which is only a reference line.
+  provisional_r_m: 12

@@ -106,6 +106,35 @@ def render(scene, pose: CameraPose, intrinsics: Intrinsics, spp: int, seed: int 
     return np.array(image, dtype=np.float32)[..., 0]
 
 
+class MeshRenderer:
+    """The simulator's "mesh" fidelity: the mesh under one of a fixed list of suns.
+
+    Keeps one sun's scene loaded at a time (about 2 s to load the Jezero mesh); callers
+    running many descents should group them by sun. Sets the `cuda_ad_rgb` variant.
+    """
+
+    def __init__(self, mesh_dir: Path, suns: list[Sun], spp: int):
+        import mitsuba as mi
+
+        mi.set_variant("cuda_ad_rgb")
+        self.mesh_dir, self.suns, self.spp = Path(mesh_dir), list(suns), spp
+        self._scene, self._sun_index = None, None
+
+    def __call__(self, pose: CameraPose, intrinsics: Intrinsics, sun_index: int, seed: int) -> np.ndarray:
+        if not 0 <= sun_index < len(self.suns):
+            raise ValueError(f"sun index {sun_index}; this renderer has {len(self.suns)} suns")
+        if sun_index != self._sun_index:
+            import drjit as dr
+
+            self._scene = None
+            dr.flush_malloc_cache()
+            self._scene = terrain_scene(self.mesh_dir, self.suns[sun_index])
+            self._sun_index = sun_index
+        image = render(self._scene, pose, intrinsics, self.spp, seed=seed)
+        require_no_blank_lines(image)
+        return image
+
+
 def require_no_blank_lines(image: np.ndarray) -> None:
     """Raise if any image row or column is exactly zero.
 

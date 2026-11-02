@@ -58,6 +58,12 @@ class OrbitalMap:
         y = my - self.origin[1]
         return np.column_stack([x, y, self._elevation(mx, my)])
 
+    def ground_height(self, east: float, north: float) -> float:
+        """DTM elevation beneath a world position (ground metres east and north of world (0, 0))."""
+        mx = np.array([east / self.east_scale + self.origin[0]])
+        my = np.array([north + self.origin[1]])
+        return float(self._elevation(mx, my)[0])
+
     def _elevation(self, mx: np.ndarray, my: np.ndarray) -> np.ndarray:
         """Bilinear in the DTM's pixel centres; past the outermost centres it extrapolates the edge cell."""
         col, row = ~self.dtm_transform @ (mx, my)
