@@ -34,7 +34,7 @@ The spec's main early risk was that a 6 m CTX-like map would be too coarse to ma
 | 10 m | 1793 | 928 | 914 | ok | 3.23 | 0.14 |
 | 12 m | 1265 | 641 | 628 | ok | 1.87 | 0.14 |
 
-**Matching does not break at CTX-like resolution.** At 6 m it locates within 0.9 m at both ends of the band, with about 2,000 inliers. It holds out to 12 m, the coarsest map tried, within 3.3 m.
+**Matching does not break at CTX-like resolution.** At 6 m it locates within 0.92 m at both ends of the band, with about 2,000 inliers. It holds out to 12 m, the coarsest map tried, within 3.3 m.
 
 **What breaks it is the scale ratio, not coarseness.** The one failure is the *sharpest* map at the *highest* altitude: a 2 m map against 8.2 m descent pixels, a map 4× finer than the image. ALIKED's keypoints and descriptors aren't scale-invariant, so they need the two images at a similar ground scale. Map pixel over descent pixel, the sweep worked from 0.47 (2 m at 2.2 km) to 2.8 (12 m at 2.2 km) and failed at 0.24 (2 m at 4.2 km). Where in 0.24–0.47 it breaks wasn't measured. LVS's 6 m map sits at 0.73–1.4 across the band, comfortably inside the range that worked.
 
@@ -55,7 +55,7 @@ The whole 1670 px map, as the navigator uses it: four tiles, 14,290 keypoints. T
 | 2.2 km, zenith sun, heading 90 | 14290 | 23 | 0 | no_solution | - | 0.26 |
 | 2.2 km, zenith sun, heading 180 | 14290 | 63 | 0 | no_solution | - | 0.22 |
 
-- **The full map is a little worse at 2.2 km than the window** (1.88 m against 0.92 m, about 230 fewer matches): it has 3.5× as many keypoints, most of them outside the view, for LightGlue to sort through. One position, so whether that difference is typical isn't known.
+- **The full map is a little worse at 2.2 km than the window** (1.88 m against 0.92 m, 264 fewer matches): it has 3.5× as many keypoints, most of them outside the view, for LightGlue to sort through. One position, so whether that difference is typical isn't known.
 - **The landing-day sun (azimuth 257°, elevation 40°) still locates within 3.4 m.** Its shading and shadows don't match the map's lighting, and matches barely drop. One sun, one position.
 - **Heading breaks it.** Turned 45° from north-up it keeps 90 inliers and misses by 12 m; at 90° and 180° it fails. ALIKED and LightGlue aren't rotation-invariant. The scenario sampler draws heading uniformly over 0–360°, so as things stand most Monte Carlo descents would fail for this reason alone. LVS knew its attitude from the IMU and warped each descent image before matching; Fidelis will need the same step (derotating by the known heading) before the Monte Carlo runs. Not part of #7, whose perfect conditions are north-up.
 

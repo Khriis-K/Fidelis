@@ -118,7 +118,7 @@ def test_a_perfect_conditions_render_of_jezero_locates_within_half_a_ctx_map_pix
     # altitudes, above the mean ground, sit inside LVS's 2.2-4.2 km band, near its ends.
     # The map is the 6 m CTX-like one. Half its ground pixel is the tolerance: thousands of
     # inliers average well below one map pixel, so missing it means something systematic.
-    # Both ends, because one isn't enough: at 2.3 km the fix already carries about 1.8 m
+    # Both ends, because one isn't enough: near 2.2 km the fix already carries 1.88 m
     # of matching bias, pointing so that a half-pixel slip in the map's georeferencing
     # (about 4 m) still lands inside the tolerance. At 4.1 km the bias is small and the
     # slip isn't (docs/benchmarks/navigator.md).
