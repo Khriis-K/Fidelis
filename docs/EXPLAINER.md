@@ -2,7 +2,7 @@
 
 A refresher for explaining Fidelis to recruiters. Plain English first, key technical terms kept.
 
-> **Status:** early development. The Python environment and a smoke test of every core library exist (`docs/environment.md`). All five pass on the dev laptop and on L40S and A100 GPUs on USC's CARC cluster, run through the same Snakemake workflow. Everything else below describes the *planned* system from `docs/fidelis-spec.md`, and nothing has been measured yet.
+> **Status:** early development. The Python environment and a smoke test of every core library exist (`docs/environment.md`). All five pass on the dev laptop and on L40S and A100 GPUs on USC's CARC cluster, run through the same Snakemake workflow. The workflow also builds the Jezero test scene: it downloads the USGS data, cuts a 2 km tile, makes the CTX-like matching map, and turns the tile into a textured 3D terrain mesh (checks in `docs/benchmarks/terrain-mesh.md`). Everything else below describes the *planned* system from `docs/fidelis-spec.md`, and nothing has been measured yet.
 
 ## The two-minute pitch
 
@@ -44,6 +44,8 @@ A refresher for explaining Fidelis to recruiters. Plain English first, key techn
 
 **Checksums and pinning data**: a checksum (here SHA-256) is a short fingerprint of a file's exact bytes. Change one byte and the fingerprint changes. *In Fidelis:* USGS doesn't publish checksums for the Jezero mosaics, so the first download records its own, and every later download on any machine has to match it. That catches a truncated download or a file quietly replaced upstream. The catch is that it trusts the first download ("trust on first use").
 
+**Textured mesh, UV coordinates, and float32 precision**: a terrain mesh is a surface made of triangles, one corner (vertex) per height sample. A texture is an image draped over it. Each vertex carries a UV coordinate, its position in the image from 0 to 1 across and up, which says which part of the image paints that spot. GPUs store positions as float32, which keeps about 7 significant digits. *In Fidelis:* the Jezero mesh has a vertex at every 1 m DTM pixel (4 million of them), so it matches the DTM exactly at its samples. It's built around the tile centre: in raw map coordinates (around 4.6 million metres east), float32 could only place vertices to the nearest half metre.
+
 ## Challenges and how we solved them
 
 <!-- Format: ### Title — then: the problem, how we noticed, what we did, what it taught us. -->
@@ -68,6 +70,16 @@ A refresher for explaining Fidelis to recruiters. Plain English first, key techn
 
 **What it taught us.** Anything checkable without the expensive resource should be checked before asking for it. Our docs had already warned about exactly this risk, and we submitted anyway, so a warning in a doc isn't a check. A step that runs every time is.
 
+### Two programs that disagree about which way is up in an image
+
+**The problem.** The terrain mesh needs to work in two places: Mitsuba, the renderer that makes all of Fidelis's training images, and ordinary 3D viewers, which we use to eyeball it. A texture coordinate of v = 0 means "bottom row of the image" to MeshLab, Blender and three.js, but "top row" to Mitsuba's texture lookup. Pick either convention and one of them shows the terrain with its texture mirrored north to south: craters in the picture land on flat ground in the geometry. Nothing crashes, and a quick look might not catch it, because Mars terrain looks plausible either way.
+
+**How we noticed.** Before writing the mesh code, we gave Mitsuba a two-pixel image and a hand-made triangle and asked which pixel it sampled at a known coordinate. Its PLY loader keeps coordinates as written, and its textures count rows from the top.
+
+**What we did.** The mesh file follows the standard convention (v = 0 at the bottom), so viewers display it correctly. The one function that hands the mesh to Mitsuba flips v. Tests check registration through Mitsuba's own texture lookup, on a fake image where each pixel's value encodes its own row and column, so the value Mitsuba returns says exactly where it looked. On the real tile, a straight-down render matches the orthoimage (correlation 0.972, no measurable shift), and flipping it drops the correlation to −0.11.
+
+**What it taught us.** When two tools share a file format, check the convention each one reads, not the one the format spec implies. And test through the consumer that actually matters (here, the renderer), on data built so a mistake can't look plausible.
+
 ## Headline results
 
 None yet. Numbers go here only once they're committed in `docs/benchmarks/` or `docs/adr/`, each with its caveat.
@@ -77,3 +89,5 @@ None yet. Numbers go here only once they're committed in `docs/benchmarks/` or `
 <!-- What the results don't show, and why. -->
 
 - **The CTX-like map is an approximation.** It's the HiRISE orthoimage averaged in 24×24 blocks. That removes detail CTX can't see, but it doesn't model CTX's optics, noise, or different viewing geometry, and it isn't the real onboard LVS map.
+
+- **The terrain is only as detailed as the 1 m DTM.** Rocks and ridges smaller than a metre exist in the photo texture but not in the geometry, so they don't cast their own shadows when relit. The texture also still holds the shadows from the moment HiRISE took the picture; removing those is a separate step (issue #19).

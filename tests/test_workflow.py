@@ -71,7 +71,7 @@ def test_every_carc_gpu_job_pins_its_gpu_model():
     assert not unpinned, f"GPU jobs without a pinned CARC GPU type: {unpinned}"
 
 
-JEZERO_RULES = {"download_mosaic", "jezero_tile", "jezero_matching_map"}
+JEZERO_RULES = {"download_mosaic", "jezero_tile", "jezero_matching_map", "jezero_mesh"}
 
 
 @pytest.mark.parametrize("profile", ["local", "carc"])
@@ -121,6 +121,8 @@ def test_jezero_data_jobs_stay_off_the_gpu_partition():
         "data/jezero/tile/dtm.tif",
         "data/jezero/tile/tile.json",
         "data/jezero/matching_map/map.tif",
+        "data/jezero/mesh/mesh.ply",
+        "data/jezero/mesh/texture.png",
     ],
 )
 def test_jezero_data_stays_out_of_git(path):

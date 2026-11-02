@@ -19,6 +19,7 @@ set-resources:
   # (download_mosaic is a localrule: compute nodes have no internet.)
   - jezero_tile:slurm_partition=main
   - jezero_matching_map:slurm_partition=main
+  - jezero_mesh:slurm_partition=main
 
 # Check the module line on the login node on every run, before anything queues.
 forcerun:
