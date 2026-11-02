@@ -74,7 +74,7 @@ matching_map:
 # and load_config refuses any whose worst case could see past the tile: the highest
 # altitude plus terrain_relief_m, at the largest tilt, through the image corner, from the
 # largest offset. On this 10 km tile that check, not Mars, caps tilt and offset well
-# below flight values; a CTX-ringed ~26 km scene would lift the cap (see that ticket).
+# below flight values; a CTX-ringed ~26 km scene would lift the cap (issue #33).
 scenario:
   # LCAM: 90 x 90 deg (Maki et al. 2020; docs/camera-conventions.md).
   camera_fov_deg: 90
@@ -94,8 +94,9 @@ scenario:
   # No source gives either; heading drifted ~70 deg in 35 s on the parachute. Fidelis choice.
   tilt_azimuth_deg: {dist: uniform, low: 0, high: 360}
   heading_deg: {dist: uniform, low: 0, high: 360}
-  # Fraction of full scale: ~0.75 DN at the flight mean of 60 DN up to the < 2 DN design
-  # figure (computed from Maki et al. 2020 Table 5).
+  # Fraction of full scale. Flight: ~0.75 DN at the 60 DN mean (0.3%); design: < 2 DN
+  # (0.8%), both computed from Maki et al. 2020 Table 5. The low end reaches a little
+  # below flight, as the research note suggests.
   noise_sd: {dist: uniform, low: 0.002, high: 0.008}
   # Up to the ~0.5 px of the 1 ms exposure requirement at 50 deg/s (computed); flight's
   # shorter exposures blurred far less. A sensitivity knob more than a flight value.

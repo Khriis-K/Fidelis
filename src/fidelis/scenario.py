@@ -52,6 +52,13 @@ class TruncatedNormal:
             raise ValueError(f"truncnorm needs sd > 0, got {self.sd}")
         if not self.low < self.high:
             raise ValueError(f"truncnorm needs low < high, got [{self.low}, {self.high}]")
+        # Bounds so far out that the normal's CDF rounds to 0 or 1 would break the
+        # inverse-CDF draw; such a config means a typo, so refuse it here.
+        normal = NormalDist(self.mean, self.sd)
+        if not (0 < normal.cdf(self.low) < normal.cdf(self.high) < 1):
+            raise ValueError(
+                f"truncnorm bounds [{self.low}, {self.high}] are too far into the tails of N({self.mean}, {self.sd})"
+            )
 
     def bounds(self) -> tuple[float, float]:
         return self.low, self.high
@@ -138,7 +145,10 @@ class ScenarioConfig:
         missing, unknown = set(FIELDS) - set(section), set(section) - set(FIELDS)
         if missing or unknown:
             raise ValueError(f"scenario inputs: missing {sorted(missing)}, unknown {sorted(unknown)}")
-        return cls(**{name: parse_distribution(section[name]) for name in FIELDS})
+        config = cls(**{name: parse_distribution(section[name]) for name in FIELDS})
+        if not isinstance(config.sun_index, Integers):
+            raise ValueError("sun_index must use dist: integers, since it picks one of the sun angles")
+        return config
 
 
 def draw(config: ScenarioConfig, seed: int) -> Scenario:

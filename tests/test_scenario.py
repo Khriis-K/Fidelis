@@ -235,10 +235,64 @@ def test_terrain_relief_counts_against_the_tile():
         )
 
 
-def test_the_jezero_config_loads_and_every_draw_stays_on_the_tile():
+@pytest.fixture(scope="module")
+def jezero():
     config = load_config(REPO / "config" / "jezero.yaml")
-    s = draw(config, 0)
-    assert s.seed == 0
+    return config, [draw(config, seed) for seed in range(N)]
+
+
+def test_the_jezero_config_loads_and_every_draw_stays_on_the_tile(jezero):
+    # Each draw's own reach, not just the config's worst case, against the tile's
+    # half-widths (10 km of map; east-west scaled to ground by cos(latitude)).
+    _, samples = jezero
+    scene = yaml.safe_load((REPO / "config" / "jezero.yaml").read_text(encoding="utf-8"))
+    half_north = scene["tile"]["size_m"] / 2
+    half_east = half_north * math.cos(math.radians(scene["tile"]["center_lat"]))
+    relief, fov = scene["scenario"]["terrain_relief_m"], scene["scenario"]["camera_fov_deg"]
+    for s in samples:
+        reach = max_ground_reach_m(s.altitude_m + relief, s.tilt_deg, fov)
+        assert abs(s.offset_east_m) + reach <= half_east
+        assert abs(s.offset_north_m) + reach <= half_north
+
+
+@pytest.mark.parametrize("name", [f for f in FIELDS if f != "sun_index"])
+def test_each_jezero_input_follows_its_configured_distribution(jezero, name):
+    config, samples = jezero
+    values = [getattr(s, name) for s in samples]
+    assert stats.kstest(values, scipy_dist(getattr(config, name)).cdf).pvalue > 1e-3, name
+
+
+def test_a_seed_gives_the_same_scenario_across_library_versions():
+    # Pinned values, not just a repeat within one process: a NumPy update that changed
+    # its random streams would otherwise quietly change every recorded descent.
+    expected = {
+        "offset_east_m": 376.63344732215114,
+        "offset_north_m": 32.21027351543845,
+        "altitude_m": 2521.111338107608,
+        "tilt_deg": 7.470293128595389,
+        "tilt_azimuth_deg": 301.249454471735,
+        "heading_deg": 224.00240995535933,
+        "noise_sd": 0.010867478677705513,
+        "blur_px": 0.9237440734229438,
+        "blur_angle_deg": 155.68170013876778,
+        "exposure_gain": 1.0429697251747545,
+        "sun_index": 0,
+    }
+    s = draw(make_config(), 0)
+    for name, value in expected.items():
+        assert getattr(s, name) == pytest.approx(value, rel=1e-12), name
+
+
+def test_a_truncated_normal_bounded_deep_in_its_tail_is_refused():
+    # cdf(9 sd) rounds to 1, which would crash every draw; refuse it up front.
+    with pytest.raises(ValueError, match="tails"):
+        TruncatedNormal(mean=0.0, sd=1.0, low=-1.0, high=9.0)
+
+
+def test_a_non_integer_sun_index_is_refused():
+    section = {name: {"dist": "uniform", "low": 0, "high": 1} for name in FIELDS}
+    with pytest.raises(ValueError, match="sun_index"):
+        ScenarioConfig.from_dict(section)
 
 
 def test_loading_a_config_that_can_leave_the_tile_is_refused(tmp_path):

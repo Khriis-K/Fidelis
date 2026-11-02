@@ -117,6 +117,10 @@ From the metadata ("Vertical positional accuracy") and Fergason et al. 2020:
   - It could extend HiRISE detail westward, but not into a centred square. Download: 5.47 GB zip of mosaics; 8 of 10 planned stereo pairs completed.
 - **HRSC.** DLR's HRSC Level 5 DTM was the absolute reference for the CTX DTM, with ~13 m vertical precision per USGS. Its public availability and pixel size were not verified.
 
+## 6. Could the HiRISE tile just move? (measured, 2026-11-01)
+
+The largest square with both HiRISE products valid, placed anywhere in the mosaics, is **about 12.4 km of map** (11.8 km of ground east–west), centred about 1.2 km north of the landing site. Method: both mosaics' validity masks read onto a 20 m grid with nearest-neighbour sampling, intersected, then the largest all-valid square found by dynamic programming. Caveat: nearest-neighbour sampling can miss holes smaller than 20 m, so this is an upper bound on a hole-free square. Moving the tile would add about 1 km of room per side, far short of the ~5 km that flight-like tilts need, so HiRISE alone can't make a wide enough scene.
+
 ## Sources
 
 All read 2026-11-01.
