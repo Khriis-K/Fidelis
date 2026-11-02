@@ -158,7 +158,7 @@ A refresher for explaining Fidelis to recruiters. Plain English first, key techn
 
 **The problem.** Every simulated descent records how long it took, because the multifidelity estimator later decides how many cheap and expensive samples to buy from those costs. A wrong cost means a wrong budget split, silently.
 
-**How we noticed.** The first 20-descent run's costs weren't one cluster: most took about 0.4 s, but five took about 2 s. Those five were exactly the first descent under each new sun angle. That's when the renderer loads that sun's copy of the 289 MB terrain mesh, and the loading was happening inside the timer. The code's own comment said the cost excluded loading; the data said otherwise. Comparing the two runs also showed the same seed doesn't give exactly the same error on the GPU (up to 0.54 m apart), which a single run can't reveal.
+**How we noticed.** The first 20-descent run's costs weren't one cluster: most took about 0.4 s, but five took 1.85–2.73 s. Those five were exactly the first descent under each new sun angle. That's when the renderer loads that sun's copy of the 289 MB terrain mesh, and the loading was happening inside the timer. The code's own comment said the cost excluded loading; the data said otherwise. Comparing the two runs also showed the same seed doesn't give exactly the same error on the GPU (up to 0.54 m apart), which a single run can't reveal.
 
 **What we did.** The renderer now has a separate "load this sun" step that the simulator calls before starting the clock, and a test uses a fake renderer that takes 2 s to load to prove the recorded cost leaves it out. On the rerun, costs were 0.38–0.58 s, except the very first render of the process (0.92 s, probably one-time GPU warm-up). The repeatability gap is written down as a limitation to measure before the threshold is set.
 
@@ -190,7 +190,7 @@ A refresher for explaining Fidelis to recruiters. Plain English first, key techn
 
 - **The failure threshold r is provisional.** The first plain Monte Carlo command counts a descent as failed beyond 12 m (two 6 m map pixels), a placeholder we chose until the pilot study sets r so that 2–10% of descents fail. Any failure rate quoted before then is at that placeholder, and the outputs say so.
 
-- **A seed regenerates its descent to about half a metre on the GPU, not exactly.** Running the same 20 seeds twice moved each error by a median 0.08 m and at most 0.54 m. On the CPU it repeats exactly. The cause is probably GPU matching rather than rendering, but that's not confirmed (`docs/benchmarks/plain-mc.md`). It's small against r, but it can flip a sample sitting right at the threshold.
+- **A seed regenerates its descent to about half a metre on the GPU, not exactly.** Running the same 20 seeds twice moved each error by a median 0.08 m and at most 0.54 m. On the CPU it repeats exactly within one process (across processes isn't checked). The cause is probably GPU matching rather than rendering, but that's not confirmed (`docs/benchmarks/plain-mc.md`). It's small against r, but it can flip a sample sitting right at the threshold.
 
 - **Exposure is set from each image, not from a radiometric prediction.** Perseverance's exposure was fixed in advance from predictions. Our renderer's brightness isn't physical, so the "correct" exposure is taken from the image itself (its brightest 0.1% at full scale), and the scenario's exposure gain is the error on top. That's a stand-in for a prediction that was right before the error, not a model of how the prediction was made.
 

@@ -19,7 +19,7 @@ from fidelis.nav.orbital_map import OrbitalMap
 from fidelis.render.camera import CameraPose, Intrinsics
 from fidelis.scenario import Scenario
 from fidelis.simulation import SimulationRecord, Simulator, scenario_pose
-from fidelis.terrain.fetch import sha256_of as file_sha256
+from fidelis.terrain.fetch import sha256_of
 
 REPO = Path(__file__).resolve().parents[1]
 LEFT, TOP = 4589000.0, 1094000.0
@@ -217,7 +217,7 @@ def test_every_record_names_the_config_it_ran_under(simulator, tmp_path):
     # A seed reruns the same descent only under the same config: the record says which.
     config = tmp_path / "scene.yaml"
     config.write_text("scenario: {}\n")
-    digest = file_sha256(config)
+    digest = sha256_of(config)
     assert digest == hashlib.sha256(config.read_bytes()).hexdigest()
     sim = Simulator(simulator.renderers, simulator.navigator, K, config_sha256=digest)
     assert sim.run(scenario(), "black").record.config_sha256 == digest
@@ -271,7 +271,9 @@ def test_perfect_conditions_on_the_jezero_mesh_locate_within_half_a_ctx_map_pixe
     assert first.status == "ok"
     assert first.error_m < 3.0
     assert first.gpu != "cpu"
-    # Same sample and seed, same error, up to the renderer's stated GPU nondeterminism.
+    # Same sample and seed, same error, within one process. Across processes the GPU path
+    # drifted up to 0.54 m on the first plain MC run (docs/benchmarks/plain-mc.md); the
+    # renderer repeats to 1e-6, so the cause is likely matching, not yet confirmed.
     second = sim.run(s, "mesh").record
     np.testing.assert_allclose(second.error_vector, first.error_vector, atol=0.05)
     # Records stay JSON-safe on the GPU path too.
