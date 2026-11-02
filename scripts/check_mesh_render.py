@@ -1,10 +1,11 @@
 """Render the Jezero mesh as the descent camera sees it: the numbers in docs/benchmarks/mesh-render.md.
 
 A nadir LCAM-like camera (1024 x 1024 px, 90 deg field of view) 900 m above the tile's
-mean ground, under three suns. For each sun: scene load time, render time per image,
-same-seed and other-seed differences, and noise against a 1024 spp reference. Writes one
-PNG per sun and a side-by-side zoom on a crater into OUT_DIR. Uses the GPU for about a
-minute.
+mean ground, under five suns (east and west at 10 and 30 deg, south at 60 deg). For each
+sun: scene load time, render time per image, same-seed and other-seed differences, and
+noise against a 1024 spp reference. Writes one PNG per sun into OUT_DIR, plus two panels
+of the central 256 x 256 px: shadows_low_sun.png (east and west at 10 deg) and
+shading.png (the other three).
 
     uv run python scripts/check_mesh_render.py data/jezero/mesh data/jezero/render
 """

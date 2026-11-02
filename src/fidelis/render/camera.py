@@ -19,6 +19,10 @@ from dataclasses import dataclass
 
 import numpy as np
 
+# How far RᵀR may be from the identity: room for float32 storage (gsplat, JSON round
+# trips; about 1e-7), far below any real error such as a scaled or sheared matrix.
+ROTATION_TOLERANCE = 1e-6
+
 
 @dataclass(frozen=True)
 class CameraPose:
@@ -27,7 +31,7 @@ class CameraPose:
 
     def __post_init__(self):
         r = np.asarray(self.rotation, dtype=np.float64)
-        if r.shape != (3, 3) or not np.allclose(r.T @ r, np.eye(3), atol=1e-9) or np.linalg.det(r) < 0:
+        if r.shape != (3, 3) or not np.allclose(r.T @ r, np.eye(3), atol=ROTATION_TOLERANCE) or np.linalg.det(r) < 0:
             raise ValueError(f"camera-to-world matrix is not a rotation:\n{r}")
         object.__setattr__(self, "rotation", r)
         object.__setattr__(self, "position", np.asarray(self.position, dtype=np.float64).reshape(3))
@@ -43,6 +47,8 @@ def look_at(eye, target, up) -> CameraPose:
     """A camera at `eye` looking at `target`, with `up` pointing towards the image's top."""
     eye, target, up = (np.asarray(v, dtype=np.float64) for v in (eye, target, up))
     z = target - eye
+    if np.linalg.norm(z) < 1e-9:
+        raise ValueError("target is at the eye, so the view direction is undefined")
     z /= np.linalg.norm(z)
     x = np.cross(-up, z)
     if np.linalg.norm(x) < 1e-9:

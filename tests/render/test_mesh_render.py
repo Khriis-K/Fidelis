@@ -120,7 +120,8 @@ def test_the_plateau_casts_its_shadow_away_from_the_sun_with_length_height_over_
         assert at(d) < 0.05 * lit, f"{d:.1f} m downsun of the plateau should be in shadow"
     assert at(length + 2.5) == pytest.approx(lit, rel=0.03)  # past the shadow's tip
     # The sunward side, 15 m out: nearer in, light bounced off the plateau's sunlit wall
-    # brightens the ground (by 6-10% at 6 m from its centre, under 3% beyond 12 m).
+    # brightens the ground (measured at 6 m from its centre: 5.9% under the 45 deg sun,
+    # 9.8% under the 30 deg sun; under 3% beyond 12 m).
     assert at(-(PLATEAU_EDGE + 15.0)) == pytest.approx(lit, rel=0.03)
     assert at(2.0, s=6.0) == pytest.approx(lit, rel=0.03)  # beside the shadow
 
@@ -145,6 +146,21 @@ def test_the_same_seed_gives_the_same_image_and_another_seed_gives_new_noise(pla
     first = render(scene, NADIR, NADIR_K, spp=4, seed=7)
     again = render(scene, NADIR, NADIR_K, spp=4, seed=7)
     other = render(scene, NADIR, NADIR_K, spp=4, seed=8)
+
+    assert np.abs(first - again).max() <= RENDER_DETERMINISM_TOLERANCE
+    assert np.abs(first - other).max() > 10 * RENDER_DETERMINISM_TOLERANCE + 1e-3
+
+
+@pytest.mark.gpu
+def test_the_same_seed_gives_the_same_image_on_the_gpu_within_the_stated_tolerance(plateau_mesh):
+    # The CUDA film adds samples atomically in no fixed order, so the GPU, which real
+    # renders use, isn't bit-for-bit repeatable the way scalar_rgb is.
+    mi.set_variant("cuda_ad_rgb")
+    scene = terrain_scene(plateau_mesh, Sun(azimuth_deg=300.0, elevation_deg=40.0))
+
+    first = render(scene, NADIR, NADIR_K, spp=64, seed=7)
+    again = render(scene, NADIR, NADIR_K, spp=64, seed=7)
+    other = render(scene, NADIR, NADIR_K, spp=64, seed=8)
 
     assert np.abs(first - again).max() <= RENDER_DETERMINISM_TOLERANCE
     assert np.abs(first - other).max() > 10 * RENDER_DETERMINISM_TOLERANCE + 1e-3

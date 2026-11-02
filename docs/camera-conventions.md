@@ -17,7 +17,7 @@ OpenCV's camera frame: **x right, y down, z forward** along the optical axis.
 
 A `CameraPose` holds:
 
-- `rotation`: the 3 × 3 **camera-to-world** rotation. Its columns are the camera's x, y and z axes written in world coordinates. A proper rotation (det +1); anything else is rejected.
+- `rotation`: the 3 × 3 **camera-to-world** rotation. Its columns are the camera's x, y and z axes written in world coordinates. A proper rotation (det +1): RᵀR must be within 1e-6 of the identity, which allows for float32 storage (gsplat, JSON round trips) but rejects a scaled or sheared matrix. Anything else is rejected.
 - `position`: the camera centre in world metres.
 
 `pose.world_to_camera()` returns the inverse as a 4 × 4 matrix `[Rᵀ | −Rᵀ·position]`. That is exactly:

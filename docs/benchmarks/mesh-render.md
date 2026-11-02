@@ -6,13 +6,17 @@ The Mitsuba path-traced renderer (`src/fidelis/render/mesh_render.py`) on the Je
 
 Pose and pixel conventions are in `docs/camera-conventions.md`.
 
+## Projection matches OpenCV
+
+The unit test renders three small glowing spheres with an oblique, rolled camera (96 × 80 px, fx = fy = 70, principal point (40.3, 45.8)) and requires each sphere's image centroid to land within 0.1 px of `cv2.projectPoints`. The first run missed by up to 14.4 px in x and 12.6 px in y. The sphere aimed at the principal point rendered at (54.70, 33.19) instead of (40.3, 45.8): mirrored about the film centre (47.5, 39.5). That pinned the error to the sign of Mitsuba's `principal_point_offset`. With the sign flipped, all three spheres pass at 0.1 px.
+
 ## What the renderer does
 
 - Mitsuba's `path` integrator, `max_depth` 3: the camera ray, a shadow ray to the sun, and one bounce of light off the terrain.
 - Smooth shading: Mitsuba's per-vertex normals (the PLY has none), so shading varies smoothly across each 1 m triangle instead of in flat facets. Shadow rays still use the true triangles.
 - The sun is a directional light with irradiance π, so sunlit flat ground renders at albedo × sin(elevation), where albedo is the orthoimage value / 255. A unit test checks that on a synthetic tile, within 3%.
 - No sky light. Shadows get only light bounced off the terrain, so they're darker than on Mars, where a dusty sky fills them.
-- Output: a float32 image of linear radiance, one channel (LCAM is a monochrome camera). Exposure, noise and blur are left to later steps.
+- Output: a float32 image of linear radiance, one channel. That's a design choice, not something #5 asked for: LCAM is a monochrome camera, and the texture is greyscale anyway. If splat training (#20) wants three channels, they'd be three copies of this one. Exposure, noise and blur are left to later steps.
 - `terrain_scene(mesh_dir, sun)` loads the mesh once per sun. `render(scene, pose, intrinsics, spp, seed)` then renders any number of poses.
 
 ## Descent-camera images (acceptance: given pose, intrinsics and sun, an image)
@@ -45,7 +49,7 @@ The target camera is LCAM-like: **1024 × 1024 px, 90° field of view** (Maki et
 
 - `scalar_rgb` (CPU, the unit tests) repeats bit for bit. A unit test asserts the tolerance and that a different seed changes the image.
 - `cuda_ad_rgb` (the GPU): the largest same-seed difference over five suns was **1.8e-7**. It isn't zero because the GPU film adds samples atomically, in no fixed order.
-- **Monte Carlo noise at 64 spp:** RMS difference from a 1024 spp render of the same view was **1.2–1.6% of the median pixel**. Two 64 spp renders with different seeds differ by 1.7–2.2% RMS.
+- **Monte Carlo noise at 64 spp:** RMS difference from a 1024 spp render of the same view was **1.2–1.6% of the median pixel**. Two 64 spp renders with different seeds differ by 1.7–2.2% RMS. 64 spp is the setting these measurements use, not a requirement. The sample count for real renders is a fidelity choice, which belongs to the fidelity levels (#10).
 - Not checked: CPU against GPU, or one GPU model against another. They'll differ by more than 1e-6, since floating-point order differs. Comparisons across machines should use the noise level above as the yardstick, not the determinism tolerance.
 
 ## Shadows move with the sun (acceptance: documented visual check across at least two angles)
@@ -54,7 +58,7 @@ The target camera is LCAM-like: **1024 × 1024 px, 90° field of view** (Maki et
 
 The sunward check had to move 15 m out, for two reasons found by measuring (45° sun, 64 spp, with and without the bounce):
 
-- **Bounce light.** Ground in front of the sunlit wall also sees the wall, so it's 5–6% brighter at 2.5–4.5 m from the wall's foot, falling under 3% beyond about 12 m from the plateau's centre. A unit test checks the bounce is there (it fails if `max_depth` drops to 2).
+- **Bounce light.** Ground in front of the sunlit wall also sees the wall, so it's brighter than open ground. At 6 m from the plateau's centre (2.5 m from the wall's foot) it was 5.9% brighter under the 45° sun, all of it bounce (0.0% with `max_depth` 2), and 9.8% brighter under a 30° sun. Under the 45° sun it was still 5.1% brighter at 8 m, and under 3% beyond about 12 m. A unit test checks the bounce is there (it fails if `max_depth` drops to 2).
 - **Smooth shading normals.** Within about 1 m of the foot, ground renders 30–40% brighter even with no bounce at all. Mitsuba computes per-vertex normals for a PLY without them, averaging the faces around each vertex. So the ground vertex at the foot of a 6 m, near-vertical wall borrows some of the wall's tilt towards the sun. Smooth normals are the usual choice for a height map, and on Jezero's gentle slopes the effect is small. It's only this large at artificial cliffs like the test plateau.
 
 **Real tile, visual check.** `scripts/check_mesh_render.py` writes `shadows_low_sun.png` (the central 256 × 256 px, about 450 m across, east sun at 10° beside west sun at 10°) and `shading.png` (east 30°, west 30°, south 60°) to `data/jezero/render/`. Checked by eye on 2026-11-01:

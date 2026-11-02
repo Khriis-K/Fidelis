@@ -50,6 +50,27 @@ def test_a_pose_rejects_a_matrix_that_is_not_a_rotation():
         CameraPose(rotation=np.diag([1.0, 1.0, -1.0]), position=np.zeros(3))
 
 
+def test_a_pose_accepts_a_rotation_stored_as_float32():
+    # gsplat keeps viewmats in float32, and poses saved to JSON may pass through it;
+    # float32 rounding (about 6e-8) must not make a valid rotation unusable.
+    exact = look_at(eye=[30.0, -40.0, 120.0], target=[5.0, 10.0, -3.0], up=[0.0, 1.0, 0.0])
+    pose = CameraPose(rotation=exact.rotation.astype(np.float32), position=exact.position.astype(np.float32))
+
+    np.testing.assert_allclose(pose.rotation, exact.rotation, atol=1e-6)
+
+
+def test_a_pose_rejects_a_matrix_that_is_slightly_scaled():
+    # 0.1% scale is far beyond float32 rounding, so it's a bug upstream, not noise.
+    rotation = look_at(eye=[30.0, -40.0, 120.0], target=[5.0, 10.0, -3.0], up=[0.0, 1.0, 0.0]).rotation
+    with pytest.raises(ValueError, match="rotation"):
+        CameraPose(rotation=1.001 * rotation, position=np.zeros(3))
+
+
+def test_look_at_refuses_a_target_at_the_eye():
+    with pytest.raises(ValueError, match="target"):
+        look_at(eye=[1.0, 2.0, 3.0], target=[1.0, 2.0, 3.0], up=[0.0, 1.0, 0.0])
+
+
 def test_intrinsics_from_field_of_view_centre_the_principal_point_on_the_image():
     # OpenCV pixel convention: pixel (0, 0)'s centre is at (0, 0), so the middle of a
     # 1024-pixel row is 511.5, not 512.

@@ -63,31 +63,31 @@ def terrain_scene(mesh_dir: Path, sun: Sun):
     )
 
 
-def mitsuba_sensor(pose: CameraPose, k: Intrinsics, spp: int) -> dict:
+def mitsuba_sensor(pose: CameraPose, intrinsics: Intrinsics, spp: int) -> dict:
     """A Mitsuba perspective camera that projects exactly as the OpenCV pinhole (pose, K) does."""
     import mitsuba as mi
 
-    if not math.isclose(k.fx, k.fy, rel_tol=1e-9):
-        raise ValueError(f"fx = {k.fx} and fy = {k.fy}: Mitsuba renders square pixels only")
+    if not math.isclose(intrinsics.fx, intrinsics.fy, rel_tol=1e-9):
+        raise ValueError(f"fx = {intrinsics.fx} and fy = {intrinsics.fy}: Mitsuba renders square pixels only")
     to_world = np.eye(4)
     to_world[:3, :3] = pose.rotation @ _OPENCV_TO_MITSUBA
     to_world[:3, 3] = pose.position
     return {
         "type": "perspective",
-        "fov": math.degrees(2 * math.atan(k.width / (2 * k.fx))),
+        "fov": math.degrees(2 * math.atan(intrinsics.width / (2 * intrinsics.fx))),
         "fov_axis": "x",
         # Mitsuba measures the principal point from the film's centre, in film widths and
         # heights, with the opposite sign to pixel coordinates (found by the projection
         # test). The film's centre is OpenCV pixel ((W - 1) / 2, (H - 1) / 2).
-        "principal_point_offset_x": -(k.cx - (k.width - 1) / 2) / k.width,
-        "principal_point_offset_y": -(k.cy - (k.height - 1) / 2) / k.height,
+        "principal_point_offset_x": -(intrinsics.cx - (intrinsics.width - 1) / 2) / intrinsics.width,
+        "principal_point_offset_y": -(intrinsics.cy - (intrinsics.height - 1) / 2) / intrinsics.height,
         "to_world": mi.ScalarTransform4f(to_world),
         "near_clip": 0.1,
         "far_clip": 1e6,
         "film": {
             "type": "hdrfilm",
-            "width": k.width,
-            "height": k.height,
+            "width": intrinsics.width,
+            "height": intrinsics.height,
             "pixel_format": "luminance",
             # Each sample counts only towards its own pixel, as in a pinhole camera.
             "rfilter": {"type": "box"},
@@ -96,11 +96,11 @@ def mitsuba_sensor(pose: CameraPose, k: Intrinsics, spp: int) -> dict:
     }
 
 
-def render(scene, pose: CameraPose, k: Intrinsics, spp: int, seed: int = 0) -> np.ndarray:
+def render(scene, pose: CameraPose, intrinsics: Intrinsics, spp: int, seed: int = 0) -> np.ndarray:
     """A height x width float32 image of linear radiance."""
     import mitsuba as mi
 
-    sensor = mi.load_dict(mitsuba_sensor(pose, k, spp))
+    sensor = mi.load_dict(mitsuba_sensor(pose, intrinsics, spp))
     integrator = mi.load_dict({"type": "path", "max_depth": MAX_DEPTH})
     image = mi.render(scene, sensor=sensor, integrator=integrator, spp=spp, seed=seed)
     return np.array(image, dtype=np.float32)[..., 0]
