@@ -148,7 +148,7 @@ def build_mesh_simulator(config_path: Path, data_dir: Path, suns=None, device: s
     if suns is None:
         suns = [Sun(s["azimuth_deg"], s["elevation_deg"]) for s in scene["suns"]]
     orbital_map = load_orbital_map(
-        data_dir / "matching_map" / "map.tif", data_dir / "tile" / "dtm.tif", data_dir / "mesh" / "mesh.json"
+        data_dir / "matching_map" / "map.tif", data_dir / "scene" / "dtm.tif", data_dir / "mesh" / "mesh.json"
     )
     renderer = MeshRenderer(data_dir / "mesh", suns, spp=scene["simulation"]["mesh_spp"])
     intrinsics = Intrinsics.from_fov(LCAM_PX, LCAM_PX, scene["scenario"]["camera_fov_deg"])

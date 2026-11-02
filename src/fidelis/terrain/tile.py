@@ -23,12 +23,10 @@ import yaml
 from rasterio.transform import Affine
 from rasterio.windows import Window, from_bounds
 
-from fidelis.terrain.matching_map import block_mean, downsample_factor
+from fidelis.terrain.matching_map import EPS, block_mean, downsample_factor
 
 Bounds = tuple[float, float, float, float]  # left, bottom, right, top (map metres)
 
-# Snap tolerance: float noise in metres, far below any pixel size.
-EPS = 1e-6
 # Source pixels read at once. A 10 km window is 40,000 x 40,000 ortho pixels (1.6 GB),
 # and averaging works in float64, so the window is read in strips of about this size.
 STRIP_PIXELS = 2**25

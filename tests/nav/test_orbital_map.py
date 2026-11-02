@@ -112,3 +112,105 @@ def test_the_map_loads_from_the_workflow_files_in_the_mesh_world_frame(tmp_path)
         make_map().pixel_to_world(np.array([[10.0, 20.0]])),
         atol=1e-6,
     )
+
+
+# --- the wide scene: a ring DTM around the inner one, and Mars's curvature (#33) ----------
+
+MARS_RADIUS_M = 3396190.0
+RING_RES = 40.0
+RING_LEFT, RING_TOP = LEFT - 400.0, TOP + 400.0
+
+
+def ring_plane(mx, my):
+    """The ring's terrain: the inner plane, 3 m higher, so a lookup shows which DTM answered."""
+    return plane(mx, my) + 3.0
+
+
+def ring_dtm():
+    cols, rows = np.meshgrid(np.arange(25), np.arange(25))
+    heights = ring_plane(RING_LEFT + (cols + 0.5) * RING_RES, RING_TOP - (rows + 0.5) * RING_RES)
+    return heights.astype(np.float32), from_origin(RING_LEFT, RING_TOP, RING_RES, RING_RES)
+
+
+def make_wide_map(curvature_radius_m=None):
+    dtm, dtm_transform = plane_dtm()
+    ring, ring_transform = ring_dtm()
+    # 600 m of map around the 200 m inner DTM, all inside the 1000 m ring.
+    return OrbitalMap(
+        image=np.zeros((300, 300), np.float32),
+        transform=from_origin(LEFT - 200.0, TOP + 200.0, 2.0, 2.0),
+        dtm=dtm,
+        dtm_transform=dtm_transform,
+        origin=ORIGIN,
+        east_scale=EAST_SCALE,
+        ring_dtm=ring,
+        ring_dtm_transform=ring_transform,
+        curvature_radius_m=curvature_radius_m,
+    )
+
+
+def test_a_map_wider_than_the_inner_dtm_is_accepted_when_the_ring_covers_it():
+    make_wide_map()
+
+
+def test_elevation_comes_from_the_inner_dtm_inside_it_and_from_the_ring_outside():
+    wide = make_wide_map()
+    inside = (LEFT + 100.0, TOP - 100.0)
+    outside = (LEFT + 350.0, TOP - 100.0)
+    for (mx, my), expected in ((inside, plane), (outside, ring_plane)):
+        east, north = (mx - ORIGIN[0]) * EAST_SCALE, my - ORIGIN[1]
+        assert wide.ground_height(east, north) == pytest.approx(expected(mx, my), abs=1e-3)
+
+
+def test_map_pixels_over_the_ring_get_ring_elevations():
+    wide = make_wide_map()
+    # Map column 10 is 179 m west of the inner DTM's edge.
+    world = wide.pixel_to_world(np.array([[10.0, 150.0]]))
+    mx, my = LEFT - 200.0 + 21.0, TOP + 200.0 - 301.0
+    assert world[0, 2] == pytest.approx(ring_plane(mx, my), abs=1e-3)
+
+
+def test_curvature_lowers_the_ground_by_d_squared_over_2r_from_the_world_origin():
+    flat, curved = make_wide_map(), make_wide_map(curvature_radius_m=MARS_RADIUS_M)
+    for east, north in [(0.0, 0.0), (250.0, -120.0), (-180.0, 300.0)]:
+        drop = (east**2 + north**2) / (2 * MARS_RADIUS_M)
+        assert curved.ground_height(east, north) == pytest.approx(flat.ground_height(east, north) - drop, abs=1e-9)
+    pixels = np.array([[3.0, 290.0], [250.0, 20.0]])
+    f, c = flat.pixel_to_world(pixels), curved.pixel_to_world(pixels)
+    np.testing.assert_allclose(c[:, 2], f[:, 2] - (f[:, 0] ** 2 + f[:, 1] ** 2) / (2 * MARS_RADIUS_M), atol=1e-9)
+    assert (f[:, 2] - c[:, 2]).max() > 0.01  # far enough out for the drop to show
+
+
+def test_the_map_loads_the_ring_and_curvature_named_in_mesh_json(tmp_path):
+    write_raster(tmp_path / "map.tif", np.zeros((100, 100), np.uint8), 2.0)
+    dtm, _ = plane_dtm()
+    write_raster(tmp_path / "dtm.tif", dtm, 8.0)
+    ring, _ = ring_dtm()
+    profile = {
+        "driver": "GTiff",
+        "width": 25,
+        "height": 25,
+        "count": 1,
+        "dtype": ring.dtype,
+        "crs": MARS_EQC,
+        "transform": from_origin(RING_LEFT, RING_TOP, RING_RES, RING_RES),
+    }
+    (tmp_path / "scene").mkdir()
+    with rasterio.open(tmp_path / "scene" / "ring_dtm.tif", "w", **profile) as dst:
+        dst.write(ring, 1)
+    (tmp_path / "mesh").mkdir()
+    (tmp_path / "mesh" / "mesh.json").write_text(
+        json.dumps(
+            {
+                "origin": list(ORIGIN),
+                "east_scale": EAST_SCALE,
+                "curvature_radius_m": MARS_RADIUS_M,
+                "ring": {"dtm": "../scene/ring_dtm.tif"},
+            }
+        )
+    )
+
+    loaded = load_orbital_map(tmp_path / "map.tif", tmp_path / "dtm.tif", tmp_path / "mesh" / "mesh.json")
+
+    assert loaded.curvature_radius_m == MARS_RADIUS_M
+    np.testing.assert_array_equal(loaded.ring_dtm, ring)

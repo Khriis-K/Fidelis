@@ -71,7 +71,7 @@ def test_every_carc_gpu_job_pins_its_gpu_model():
     assert not unpinned, f"GPU jobs without a pinned CARC GPU type: {unpinned}"
 
 
-JEZERO_RULES = {"download_mosaic", "jezero_tile", "jezero_matching_map", "jezero_mesh"}
+JEZERO_RULES = {"download_mosaic", "jezero_tile", "jezero_scene", "jezero_matching_map", "jezero_mesh"}
 
 
 @pytest.mark.parametrize("profile", ["local", "carc"])
@@ -79,7 +79,16 @@ def test_jezero_plans_both_downloads_the_tile_and_the_matching_map(profile):
     output = dry_run(profile, "jezero", "--forceall")
 
     assert JEZERO_RULES <= set(planned_jobs(output))
-    assert len(re.findall(r"(?:local)?rule download_mosaic:", output)) == 2  # DTM and orthoimage
+    # DTM and orthoimage from HiRISE, and from CTX for the ring (#33).
+    assert len(re.findall(r"(?:local)?rule download_mosaic:", output)) == 4
+
+
+def test_every_download_is_checked_against_a_pinned_sha256():
+    # USGS publishes no checksums: an unpinned mosaic would accept whatever bytes arrive.
+    output = dry_run("local", "jezero", "--forceall")
+
+    pinned = re.findall(r"fidelis-fetch \S+ \S+ --sha256 [0-9a-f]{64} --record", output)
+    assert len(pinned) == len(re.findall(r"(?:local)?rule download_mosaic:", output)) == 4
 
 
 def localrules() -> set[str]:

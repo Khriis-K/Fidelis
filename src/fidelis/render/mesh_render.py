@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 
 from fidelis.render.camera import CameraPose, Intrinsics
-from fidelis.terrain.mesh import mitsuba_shape
+from fidelis.terrain.mesh import terrain_shapes
 
 MAX_DEPTH = 3  # camera ray, direct sun, and one bounce off the terrain
 # Same scene, pose, spp and seed on the same variant and machine: the largest pixel
@@ -51,13 +51,16 @@ class Sun:
 
 
 def terrain_scene(mesh_dir: Path, sun: Sun):
-    """The textured terrain mesh lit by the sun. Load once per mesh and sun, render many poses."""
+    """The textured terrain (the tile, and the CTX ring if built) lit by the sun.
+
+    Load once per mesh and sun, render many poses.
+    """
     import mitsuba as mi
 
     return mi.load_dict(
         {
             "type": "scene",
-            "terrain": mitsuba_shape(mesh_dir),
+            **terrain_shapes(mesh_dir),
             "sun": {"type": "directional", "direction": (-sun.direction()).tolist(), "irradiance": math.pi},
         }
     )

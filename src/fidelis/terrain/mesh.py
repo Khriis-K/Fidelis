@@ -11,10 +11,15 @@ stretches east-west by 1/cos(latitude), so x is map metres times `east_scale`
 (cos latitude at the tile centre, from tile.json); y is map metres as they are. Raw map
 metres near 4.6e6 m would also leave float32 vertex positions only 0.5 m apart.
 
-Output is a binary PLY with per-vertex UVs (v = 0 at the image's bottom row, the
-convention MeshLab, Blender and three.js use) plus texture.png and mesh.json.
+With `curvature_radius_m` (the wide scene, #33) each vertex also drops by d^2 / 2R, d its
+ground distance from the origin: Mars curving away from the tangent plane (25 m at 13 km).
 
-    uv run fidelis-mesh TILE_DIR OUT_DIR
+Output is a binary PLY with per-vertex UVs (v = 0 at the image's bottom row, the
+convention MeshLab, Blender and three.js use) plus texture.png and mesh.json. When the
+input folder also holds a CTX ring (ring.json from fidelis-scene), the ring goes beside
+it as ring.ply and ring_texture.png (`fidelis.terrain.ring`), in the same frame.
+
+    uv run fidelis-mesh SCENE_DIR OUT_DIR
 """
 
 import argparse
@@ -25,6 +30,8 @@ import cv2
 import numpy as np
 import rasterio
 
+from fidelis.terrain.raster import centres
+from fidelis.terrain.scene import to_local
 from fidelis.terrain.tile import EPS
 
 # Vertex heights are DTM samples stored as float32: rounding, not modelling, is the error.
@@ -37,20 +44,24 @@ def _read(path: Path) -> tuple[np.ndarray, rasterio.coords.BoundingBox, rasterio
 
 
 def grid_mesh(
-    heights: np.ndarray, transform: rasterio.Affine, east_scale: float
+    heights: np.ndarray,
+    transform: rasterio.Affine,
+    east_scale: float,
+    origin: tuple[float, float] | None = None,
+    curvature_radius_m: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list]:
-    """Positions (local ground metres), UVs and triangles for a north-up height grid; also the origin."""
+    """Positions (local ground metres), UVs and triangles for a north-up height grid; also the origin.
+
+    The origin defaults to the grid's centre.
+    """
     rows, cols = heights.shape
-    r, c = np.mgrid[:rows, :cols]
-    x = transform.c + (c + 0.5) * transform.a
-    y = transform.f + (r + 0.5) * transform.e
+    x, y = centres(transform, heights.shape)
     left, top = transform.c, transform.f
     right, bottom = left + cols * transform.a, top + rows * transform.e
-    origin = [(left + right) / 2, (bottom + top) / 2]
+    if origin is None:
+        origin = [(left + right) / 2, (bottom + top) / 2]
 
-    positions = (
-        np.stack([(x - origin[0]) * east_scale, y - origin[1], heights], axis=-1).reshape(-1, 3).astype(np.float32)
-    )
+    positions = to_local(x, y, heights, origin, east_scale, curvature_radius_m).reshape(-1, 3)
     uvs = np.stack([(x - left) / (right - left), (y - bottom) / (top - bottom)], axis=-1).reshape(-1, 2)
 
     # Split each grid quad into two triangles, counter-clockwise seen from above (normals up).
@@ -81,10 +92,13 @@ def write_ply(path: Path, positions: np.ndarray, uvs: np.ndarray, faces: np.ndar
     tmp.replace(path)
 
 
-def build_terrain_mesh(dtm_path: Path, ortho_path: Path, out_dir: Path, east_scale: float) -> dict:
+def build_terrain_mesh(
+    dtm_path: Path, ortho_path: Path, out_dir: Path, east_scale: float, curvature_radius_m: float | None = None
+) -> dict:
     """Write mesh.ply, texture.png and mesh.json into out_dir; return the mesh.json record.
 
     east_scale is ground metres per map metre east-west (`tile.east_west_ground_scale`).
+    With no curvature radius the mesh is flat.
     """
     heights, bounds, transform, nodata, crs = _read(dtm_path)
     image, ortho_bounds, _, _, _ = _read(ortho_path)
@@ -96,7 +110,7 @@ def build_terrain_mesh(dtm_path: Path, ortho_path: Path, out_dir: Path, east_sca
     if holes.any():
         raise ValueError(f"{dtm_path} has {holes.sum()} nodata pixels; the mesh would have holes")
 
-    positions, uvs, faces, origin = grid_mesh(heights, transform, east_scale)
+    positions, uvs, faces, origin = grid_mesh(heights, transform, east_scale, curvature_radius_m=curvature_radius_m)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     tmp = out_dir / "texture.tmp.png"
@@ -112,22 +126,27 @@ def build_terrain_mesh(dtm_path: Path, ortho_path: Path, out_dir: Path, east_sca
         "bounds": list(bounds),
         "origin": origin,
         "east_scale": east_scale,
+        "curvature_radius_m": curvature_radius_m,
         "frame": (
             "local ground metres: x east = (map x - origin x) * east_scale, y north = map y - origin y;"
-            " z elevation as in the DTM"
+            " z elevation as in the DTM, less (x^2 + y^2) / (2 curvature_radius_m) when that is set"
         ),
         "uv": "v = 0 at the texture's bottom row (OpenGL convention)",
         "vertex_count": len(positions),
         "face_count": len(faces),
         "elevation_tolerance_m": ELEVATION_TOLERANCE_M,
     }
-    tmp = out_dir / "mesh.json.tmp"
-    tmp.write_text(json.dumps(record, indent=2) + "\n")
-    tmp.replace(out_dir / "mesh.json")
+    _write_record(out_dir, record)
     return record
 
 
-def mitsuba_shape(mesh_dir: Path) -> dict:
+def _write_record(out_dir: Path, record: dict) -> None:
+    tmp = out_dir / "mesh.json.tmp"
+    tmp.write_text(json.dumps(record, indent=2) + "\n")
+    tmp.replace(out_dir / "mesh.json")
+
+
+def mitsuba_shape(mesh_dir: Path, ply: str = "mesh.ply", texture: str = "texture.png") -> dict:
     """The mesh as a Mitsuba shape dict, textured diffuse. Needs a Mitsuba variant set.
 
     Mitsuba's PLY loader keeps UVs as written, but its bitmaps put v = 0 at the image's
@@ -139,12 +158,12 @@ def mitsuba_shape(mesh_dir: Path) -> dict:
     mesh_dir = Path(mesh_dir)
     return {
         "type": "ply",
-        "filename": str(mesh_dir / "mesh.ply"),
+        "filename": str(mesh_dir / ply),
         "bsdf": {
             "type": "diffuse",
             "reflectance": {
                 "type": "bitmap",
-                "filename": str(mesh_dir / "texture.png"),
+                "filename": str(mesh_dir / texture),
                 "raw": True,
                 "to_uv": mi.ScalarTransform4f().translate([0, 1, 0]).scale([1, -1, 1]),
             },
@@ -152,15 +171,46 @@ def mitsuba_shape(mesh_dir: Path) -> dict:
     }
 
 
+def terrain_shapes(mesh_dir: Path) -> dict:
+    """Every terrain shape mesh.json lists, as Mitsuba shape dicts: the tile, and the CTX ring if built."""
+    mesh_dir = Path(mesh_dir)
+    shapes = {"terrain": mitsuba_shape(mesh_dir)}
+    ring = json.loads((mesh_dir / "mesh.json").read_text()).get("ring")
+    if ring is not None:
+        shapes["ring"] = mitsuba_shape(mesh_dir, ring["ply"], ring["texture"])
+    return shapes
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("tile_dir", type=Path, help="holds dtm.tif, ortho.tif and tile.json from fidelis-tile")
+    parser.add_argument(
+        "scene_dir", type=Path, help="dtm.tif, ortho.tif and tile.json (fidelis-tile), plus the ring if fidelis-scene"
+    )
     parser.add_argument("out_dir", type=Path)
     args = parser.parse_args()
 
-    tile = json.loads((args.tile_dir / "tile.json").read_text())
+    scene = args.scene_dir
+    tile = json.loads((scene / "tile.json").read_text())
+    # fidelis-tile's flat tile records no radius; fidelis-scene's blended one does.
+    radius = tile.get("curvature_radius_m")
     record = build_terrain_mesh(
-        args.tile_dir / "dtm.tif", args.tile_dir / "ortho.tif", args.out_dir, tile["east_west_ground_scale"]
+        scene / "dtm.tif", scene / "ortho.tif", args.out_dir, tile["east_west_ground_scale"], radius
     )
     print(f"mesh {record['vertex_count']} vertices, {record['face_count']} triangles in {args.out_dir}")
+    if (scene / "ring.json").exists():
+        # Imported here: the ring module builds on this one.
+        from fidelis.terrain.ring import build_ring_mesh
+
+        record["ring"] = build_ring_mesh(
+            scene / "ring_dtm.tif",
+            scene / "ring_ortho.tif",
+            scene / "dtm.tif",
+            args.out_dir,
+            tuple(record["origin"]),
+            record["east_scale"],
+            radius,
+        )
+        _write_record(args.out_dir, record)
+        ring = record["ring"]
+        print(f"ring {ring['vertex_count']} vertices, {ring['face_count']} triangles")
     return 0

@@ -21,6 +21,7 @@ set-resources:
   # CPU-only data prep goes to `main`, off the gpu partition and its 100-job queue cap.
   # (download_mosaic is a localrule: compute nodes have no internet.)
   - jezero_tile:slurm_partition=main
+  - jezero_scene:slurm_partition=main
   - jezero_matching_map:slurm_partition=main
   - jezero_mesh:slurm_partition=main
 

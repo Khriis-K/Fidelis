@@ -62,9 +62,10 @@ rule smoke:
 # The Jezero test scene from public USGS data: one command, `snakemake jezero`.
 rule jezero:
     input:
-        f"{JEZERO}/tile/tile.json",
+        f"{JEZERO}/scene/ring.json",
         f"{JEZERO}/matching_map/map.tif",
         f"{JEZERO}/mesh/mesh.ply",
+        f"{JEZERO}/mesh/ring.ply",
 
 
 # Snakemake deletes a job's outputs before rerunning it, which would throw away a
@@ -74,7 +75,7 @@ rule download_mosaic:
     output:
         f"{JEZERO}/raw/{{mosaic}}.verified",
     wildcard_constraints:
-        mosaic="dtm|ortho",
+        mosaic="dtm|ortho|ctx_dtm|ctx_ortho",
     params:
         url=lambda w: config["mosaics"][w.mosaic]["url"],
         tif=lambda w: f"{JEZERO}/raw/{w.mosaic}.tif",
@@ -98,27 +99,50 @@ rule jezero_tile:
         f"fidelis-tile config/jezero.yaml {JEZERO}/raw/dtm.tif {JEZERO}/raw/ortho.tif {JEZERO}/tile"
 
 
-# The ground-truth scene: one vertex per DTM pixel, textured with the orthoimage, in
-# ground metres (tile.json carries the east-west scale).
-rule jezero_mesh:
+# The wide scene (#33): a CTX ring around the tile, brightness-matched, with the tile's
+# heights and texture eased into it at the edge.
+rule jezero_scene:
     input:
         f"{JEZERO}/tile/dtm.tif",
         f"{JEZERO}/tile/ortho.tif",
         f"{JEZERO}/tile/tile.json",
+        f"{JEZERO}/raw/ctx_dtm.verified",
+        f"{JEZERO}/raw/ctx_ortho.verified",
+        "config/jezero.yaml",
+    output:
+        f"{JEZERO}/scene/dtm.tif",
+        f"{JEZERO}/scene/ortho.tif",
+        f"{JEZERO}/scene/tile.json",
+        f"{JEZERO}/scene/ring_dtm.tif",
+        f"{JEZERO}/scene/ring_ortho.tif",
+        f"{JEZERO}/scene/ring.json",
+    resources:
+        mem_mb=8000,
+    shell:
+        f"fidelis-scene config/jezero.yaml {JEZERO}/tile {JEZERO}/raw/ctx_dtm.tif {JEZERO}/raw/ctx_ortho.tif"
+        f" {JEZERO}/scene"
+
+
+# The ground-truth scene: one vertex per DTM pixel, textured with the orthoimage, in
+# ground metres (tile.json carries the east-west scale and curvature), plus the ring.
+rule jezero_mesh:
+    input:
+        rules.jezero_scene.output,
     output:
         f"{JEZERO}/mesh/mesh.ply",
         f"{JEZERO}/mesh/texture.png",
+        f"{JEZERO}/mesh/ring.ply",
+        f"{JEZERO}/mesh/ring_texture.png",
         f"{JEZERO}/mesh/mesh.json",
     resources:
         mem_mb=4000,
     shell:
-        f"fidelis-mesh {JEZERO}/tile {JEZERO}/mesh"
+        f"fidelis-mesh {JEZERO}/scene {JEZERO}/mesh"
 
 
 rule jezero_matching_map:
     input:
-        f"{JEZERO}/tile/ortho.tif",
-        f"{JEZERO}/tile/tile.json",
+        rules.jezero_scene.output,
         "config/jezero.yaml",
     output:
         f"{JEZERO}/matching_map/map.tif",
@@ -126,7 +150,7 @@ rule jezero_matching_map:
     resources:
         mem_mb=4000,
     shell:
-        f"fidelis-matching-map config/jezero.yaml {JEZERO}/tile {{output[0]}}"
+        f"fidelis-matching-map config/jezero.yaml {JEZERO}/scene {{output[0]}}"
 
 # The first end-to-end estimate: N seeded descents through the mesh renderer and the
 # navigator, then P(fail) with a Wilson interval at the config's PROVISIONAL r. Each

@@ -242,11 +242,11 @@ def jezero():
 
 
 def test_the_jezero_config_loads_and_every_draw_stays_on_the_tile(jezero):
-    # Each draw's own reach, not just the config's worst case, against the tile's
-    # half-widths (10 km of map; east-west scaled to ground by cos(latitude)).
+    # Each draw's own reach, not just the config's worst case, against the scene's
+    # half-widths (the CTX-ringed scene since #33; east-west scaled to ground by cos(latitude)).
     _, samples = jezero
     scene = yaml.safe_load((REPO / "config" / "jezero.yaml").read_text(encoding="utf-8"))
-    half_north = scene["tile"]["size_m"] / 2
+    half_north = scene["scene"]["size_m"] / 2
     half_east = half_north * math.cos(math.radians(scene["tile"]["center_lat"]))
     relief, fov = scene["scenario"]["terrain_relief_m"], scene["scenario"]["camera_fov_deg"]
     for s in samples:
@@ -311,3 +311,24 @@ def test_the_sampler_does_not_import_torch():
     code = "import sys, fidelis.scenario; print('torch' in sys.modules)"
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
     assert out.stdout.strip() == "False"
+
+
+def test_the_jezero_config_reaches_flight_like_tilts_and_offsets():
+    # #33: the CTX-ringed scene lifts the tile clip. Flight pitch swung to about -12 deg and
+    # pre-flight simulations averaged 7-18 deg; position sigma is ~1.1 km.
+    config = load_config(REPO / "config" / "jezero.yaml")
+    assert config.tilt_deg.bounds()[1] >= 15
+    for offset in (config.offset_east_m, config.offset_north_m):
+        assert min(abs(b) for b in offset.bounds()) >= 2 * offset.sd
+
+
+def test_offsets_that_can_take_the_camera_off_the_hirise_tile_are_refused(tmp_path):
+    # terrain_relief_m is measured from the tile's highest ground. At nadir a 5 km offset's
+    # views still fit the wide scene, so only the camera-over-the-tile check catches it.
+    scene = yaml.safe_load((REPO / "config" / "jezero.yaml").read_text(encoding="utf-8"))
+    scene["scenario"]["tilt_deg"] = {"dist": "uniform", "low": 0, "high": 0}
+    scene["scenario"]["offset_east_m"] = {"dist": "truncnorm", "mean": 0, "sd": 1100, "low": -5000, "high": 5000}
+    path = tmp_path / "scene.yaml"
+    path.write_text(yaml.safe_dump(scene), encoding="utf-8")
+    with pytest.raises(ValueError, match="HiRISE tile"):
+        load_config(path)

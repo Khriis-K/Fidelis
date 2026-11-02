@@ -12,17 +12,28 @@ than a CTX pixel but doesn't model CTX's point-spread function or noise.
 Map pixels are square in the mosaics' map metres, so on the ground they're
 cos(latitude) narrower east-west; map.json records both ground sizes.
 
-    uv run fidelis-matching-map CONFIG TILE_DIR OUT_TIF
+For the wide scene (#33) the map covers the CTX ring too: the inner texture averaged as
+above, and the ring's (brightness-matched) CTX texture around it, bilinear-resampled onto
+the inner map's pixel grid because CTX's own grid is a fraction of a pixel off it. So the
+ring part of the map is CTX itself, slightly smoothed, not CTX-like.
+
+    uv run fidelis-matching-map CONFIG SCENE_DIR OUT_TIF
 """
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 import numpy as np
 import rasterio
 import yaml
-from rasterio.transform import Affine
+from rasterio.transform import Affine, from_origin
+
+from fidelis.terrain.raster import bilinear, centres
+
+# Snap tolerance: float noise in metres, far below any pixel size.
+EPS = 1e-6
 
 
 def require_same_resolution(lvs_m: float, ctx_m: float) -> None:
@@ -96,17 +107,66 @@ def build_matching_map(ortho_path: Path, target_res_m: float, dst_path: Path) ->
     }
 
 
+def build_scene_map(inner_ortho: Path, ring_ortho: Path, target_res_m: float, dst_path: Path) -> dict:
+    """One map over the ring: on the inner map's grid, shrunk to whole pixels inside the ring's data.
+
+    Inside the inner tile, its texture block-averaged as `build_matching_map` does; outside,
+    the ring's texture sampled bilinearly at each map pixel's centre.
+    """
+    with rasterio.open(inner_ortho) as src:
+        factor = downsample_factor(src.res[0], target_res_m)
+        inner = block_mean(src.read(1), factor, nodata=src.nodata)
+        inner_t, profile, source_res = src.transform @ Affine.scale(factor), src.profile, src.res[0]
+    with rasterio.open(ring_ortho) as src:
+        ring, ring_t, b = src.read(1), src.transform, src.bounds
+
+    res, (ox, oy) = target_res_m, (inner_t.c, inner_t.f)
+    left = ox + math.ceil((b.left - ox) / res - EPS) * res
+    right = ox + math.floor((b.right - ox) / res + EPS) * res
+    top = oy + math.floor((b.top - oy) / res + EPS) * res
+    bottom = oy + math.ceil((b.bottom - oy) / res - EPS) * res
+    shape = (round((top - bottom) / res), round((right - left) / res))
+    transform = from_origin(left, top, res, res)
+    image = np.clip(np.rint(bilinear(ring, ring_t, *centres(transform, shape))), 0, 255).astype(np.uint8)
+    col0, row0 = round((ox - left) / res), round((top - oy) / res)
+    if col0 < 0 or row0 < 0 or col0 + inner.shape[1] > shape[1] or row0 + inner.shape[0] > shape[0]:
+        raise ValueError(f"{inner_ortho} reaches past the ring's data in {ring_ortho}")
+    image[row0 : row0 + inner.shape[0], col0 : col0 + inner.shape[1]] = inner
+
+    profile = profile | {"width": shape[1], "height": shape[0], "transform": transform}
+    for key in ("blockxsize", "blockysize", "tiled"):
+        profile.pop(key, None)
+    dst_path = Path(dst_path)
+    dst_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst_path.with_name(dst_path.stem + ".tmp" + dst_path.suffix)
+    with rasterio.open(tmp, "w", **profile) as dst:
+        dst.write(image, 1)
+    tmp.replace(dst_path)
+    return {
+        "source": str(inner_ortho),
+        "ring_source": str(ring_ortho),
+        "source_resolution_m": source_res,
+        "factor": factor,
+        "resolution_m": res,
+        "shape": list(shape),
+        "bounds": [left, bottom, right, top],
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("config", type=Path)
-    parser.add_argument("tile_dir", type=Path, help="holds ortho.tif and tile.json from fidelis-tile")
+    parser.add_argument("tile_dir", type=Path, help="ortho.tif and tile.json; also ring_ortho.tif if a ring")
     parser.add_argument("out", type=Path)
     args = parser.parse_args()
 
     resolutions = yaml.safe_load(args.config.read_text())["matching_map"]
     lvs_m = resolutions["lvs_map_resolution"]["value_m"]
     require_same_resolution(lvs_m, resolutions["ctx_ground_resolution"]["value_m"])
-    info = build_matching_map(args.tile_dir / "ortho.tif", lvs_m, args.out)
+    if (args.tile_dir / "ring.json").exists():
+        info = build_scene_map(args.tile_dir / "ortho.tif", args.tile_dir / "ring_ortho.tif", lvs_m, args.out)
+    else:
+        info = build_matching_map(args.tile_dir / "ortho.tif", lvs_m, args.out)
     # The factor's provenance travels with the map.
     info["lvs_map_resolution"] = resolutions["lvs_map_resolution"]
     info["ctx_ground_resolution"] = resolutions["ctx_ground_resolution"]

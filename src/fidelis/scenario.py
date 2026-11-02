@@ -8,8 +8,8 @@ A scenario is one simulated descent's operating conditions: where the camera tru
 Every input has its own random stream, seeded by (seed, a hash of the input's name), so
 retuning one input's distribution leaves every other input of a seed unchanged. All
 distributions are bounded, which lets `check_fits_tile` prove from the config alone that
-no draw can see past the terrain tile. Distribution parameters live in the `scenario`
-section of the scene config (config/jezero.yaml).
+no draw can see past the terrain (the CTX-ringed scene, `scene.size_m`). Distribution
+parameters live in the `scenario` section of the scene config (config/jezero.yaml).
 
 Pure Python and NumPy; no GPU.
 """
@@ -200,15 +200,22 @@ def check_fits_tile(
 
 
 def load_config(path: Path) -> ScenarioConfig:
-    """The scene config's scenario distributions, checked to keep every view on the tile."""
+    """The scene config's scenario distributions, checked to keep every view on the scene's terrain."""
     scene = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
     section = dict(scene["scenario"])
     fov_deg = section.pop("camera_fov_deg")
     relief_m = section.pop("terrain_relief_m")
     config = ScenarioConfig.from_dict(section)
-    # The tile's nominal size, before it's grown to the pixel grid: a slight underestimate.
+    # terrain_relief_m is measured from the HiRISE tile's highest ground, so it holds only
+    # while the camera stays over the tile.
     tile = scene["tile"]
-    half_m = tile["size_m"] / 2
+    tile_half_north = tile["size_m"] / 2
+    tile_half_east = tile_half_north * math.cos(math.radians(tile["center_lat"]))
+    for offset, half in ((config.offset_east_m, tile_half_east), (config.offset_north_m, tile_half_north)):
+        if max(abs(b) for b in offset.bounds()) > half:
+            raise ValueError(f"an offset can put the camera past the HiRISE tile's {half:.0f} m half-width")
+    # fidelis-scene's ring reaches at least this far from the world origin (map metres).
+    half_m = scene["scene"]["size_m"] / 2
     check_fits_tile(
         config,
         half_width_east_m=half_m * math.cos(math.radians(tile["center_lat"])),

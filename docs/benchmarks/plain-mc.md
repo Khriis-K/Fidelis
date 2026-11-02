@@ -67,7 +67,7 @@ Against r in the tens of metres, the jitter is small. But it makes samples near 
 
 - **r = 12 m is a placeholder** (two 6 m map pixels), not the pilot study's r. No descent came near it, so P(fail) = 0 says only that these 20 descents all landed within 6.12 m.
 - **N = 20.** The Wilson upper bound, 16%, is the honest summary: anything from 0 to about 16% is consistent with this run.
-- **Easier than flight:** tilt capped at 3° and offsets at ±400 m by the tile (#33), true attitude, 2 m-detail renders matched against a map from the same photo, no sky light.
+- **Easier than flight:** tilt capped at 3° and offsets at ±400 m by the tile, true attitude, 2 m-detail renders matched against a map from the same photo, no sky light. Issue #33 has since widened the scene and the sampler (tilt 0–18°, offsets ±2750 m; `wide-scene.md`); this run predates that and hasn't been repeated.
 - One machine, one GPU, two runs.
 
 ## First run, as printed

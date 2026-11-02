@@ -5,9 +5,11 @@ world point for every matched map pixel, so each one is placed in the mesh's wor
 (docs/camera-conventions.md): map metres from the map's geotransform, then ground metres
 from mesh.json's origin and east_scale, and elevation from the DTM beneath it.
 
-Elevation comes from the same DTM the mesh was built from, so the map's terrain model
-is as good as the rendered terrain's. LVS's onboard elevation map was coarser; that
-error isn't modelled.
+Elevation comes from the same DTMs the mesh was built from, so the map's terrain model
+is as good as the rendered terrain's: the inner (HiRISE) DTM where it reaches, the CTX
+ring's beyond (#33), less the mesh's curvature drop. LVS's onboard elevation map was
+coarser; that error isn't modelled. Across the narrow stitch between the two meshes the
+ring DTM stands in for the stitch triangles; they meet the same heights at both edges.
 """
 
 import json
@@ -17,6 +19,9 @@ from pathlib import Path
 import numpy as np
 import rasterio
 from rasterio.transform import Affine
+
+from fidelis.terrain.raster import bilinear
+from fidelis.terrain.scene import curvature_drop
 
 # Map footprint edges may sit this far outside the DTM's (float rounding in geotransforms).
 FOOTPRINT_TOLERANCE_M = 1e-6
@@ -37,12 +42,16 @@ class OrbitalMap:
     dtm_transform: Affine
     origin: tuple[float, float]  # world (0, 0) in map metres, from mesh.json
     east_scale: float  # ground metres per map metre east-west, from mesh.json
+    ring_dtm: np.ndarray | None = None  # the CTX ring's elevation, around and beyond dtm
+    ring_dtm_transform: Affine | None = None
+    curvature_radius_m: float | None = None  # from mesh.json; None for a flat frame
 
     def __post_init__(self):
         if self.image.ndim != 2 or not (0 <= self.image.min() and self.image.max() <= 1):
             raise ValueError("map image must be a single-channel image in [0, 1]")
         left, bottom, right, top = _footprint(self.transform, self.image.shape)
-        d_left, d_bottom, d_right, d_top = _footprint(self.dtm_transform, self.dtm.shape)
+        outer = (self.dtm, self.dtm_transform) if self.ring_dtm is None else (self.ring_dtm, self.ring_dtm_transform)
+        d_left, d_bottom, d_right, d_top = _footprint(outer[1], outer[0].shape)
         tol = FOOTPRINT_TOLERANCE_M
         if left < d_left - tol or bottom < d_bottom - tol or right > d_right + tol or top > d_top + tol:
             raise ValueError(
@@ -56,30 +65,37 @@ class OrbitalMap:
         mx, my = self.transform @ (pixels[:, 0] + 0.5, pixels[:, 1] + 0.5)
         x = (mx - self.origin[0]) * self.east_scale
         y = my - self.origin[1]
-        return np.column_stack([x, y, self._elevation(mx, my)])
+        return np.column_stack([x, y, self._elevation(mx, my) - self._drop(x, y)])
 
     def ground_height(self, east: float, north: float) -> float:
         """DTM elevation beneath a world position (ground metres east and north of world (0, 0))."""
         mx = np.array([east / self.east_scale + self.origin[0]])
         my = np.array([north + self.origin[1]])
-        return float(self._elevation(mx, my)[0])
+        return float(self._elevation(mx, my)[0] - self._drop(east, north))
+
+    def _drop(self, x, y):
+        return 0.0 if self.curvature_radius_m is None else curvature_drop(x, y, self.curvature_radius_m)
 
     def _elevation(self, mx: np.ndarray, my: np.ndarray) -> np.ndarray:
-        """Bilinear in the DTM's pixel centres; past the outermost centres it extrapolates the edge cell."""
+        """DTM elevation, bilinear in pixel centres: the inner DTM's within its outermost centres, else the ring's.
+
+        Without a ring, past the inner DTM's outermost centres it extrapolates the edge cell.
+        """
+        inner = bilinear(self.dtm, self.dtm_transform, mx, my)
+        if self.ring_dtm is None:
+            return inner
         col, row = ~self.dtm_transform @ (mx, my)
-        col, row = col - 0.5, row - 0.5
         rows, cols = self.dtm.shape
-        c0 = np.clip(np.floor(col), 0, cols - 2).astype(int)
-        r0 = np.clip(np.floor(row), 0, rows - 2).astype(int)
-        fc, fr = col - c0, row - r0
-        z = self.dtm.astype(np.float64)
-        top = z[r0, c0] * (1 - fc) + z[r0, c0 + 1] * fc
-        bottom = z[r0 + 1, c0] * (1 - fc) + z[r0 + 1, c0 + 1] * fc
-        return top * (1 - fr) + bottom * fr
+        inside = (col >= 0.5) & (col <= cols - 0.5) & (row >= 0.5) & (row <= rows - 0.5)
+        return np.where(inside, inner, bilinear(self.ring_dtm, self.ring_dtm_transform, mx, my))
 
 
 def load_orbital_map(map_path: Path, dtm_path: Path, mesh_json_path: Path) -> OrbitalMap:
-    """The workflow's matching map (8-bit), the tile DTM, and the mesh's world frame."""
+    """The workflow's matching map (8-bit), the tile DTM, and the mesh's world frame.
+
+    mesh.json also names the ring's DTM (relative to its folder) and the curvature radius,
+    when the mesh has them.
+    """
     with rasterio.open(map_path) as src:
         image = src.read(1)
         transform = src.transform
@@ -89,6 +105,10 @@ def load_orbital_map(map_path: Path, dtm_path: Path, mesh_json_path: Path) -> Or
         dtm = src.read(1)
         dtm_transform = src.transform
     frame = json.loads(Path(mesh_json_path).read_text())
+    ring_dtm = ring_transform = None
+    if "ring" in frame:
+        with rasterio.open(Path(mesh_json_path).parent / frame["ring"]["dtm"]) as src:
+            ring_dtm, ring_transform = src.read(1), src.transform
     return OrbitalMap(
         image=image.astype(np.float32) / 255,
         transform=transform,
@@ -96,4 +116,7 @@ def load_orbital_map(map_path: Path, dtm_path: Path, mesh_json_path: Path) -> Or
         dtm_transform=dtm_transform,
         origin=tuple(frame["origin"]),
         east_scale=frame["east_scale"],
+        ring_dtm=ring_dtm,
+        ring_dtm_transform=ring_transform,
+        curvature_radius_m=frame.get("curvature_radius_m"),
     )

@@ -24,6 +24,7 @@ fidelis-fetch = "fidelis.terrain.fetch:main"
 fidelis-tile = "fidelis.terrain.tile:main"
 fidelis-matching-map = "fidelis.terrain.matching_map:main"
 fidelis-mesh = "fidelis.terrain.mesh:main"
+fidelis-scene = "fidelis.terrain.scene:main"
 fidelis-plain-mc = "fidelis.plain_mc:main"
 fidelis-match-viz = "fidelis.nav.match_viz:main"
 

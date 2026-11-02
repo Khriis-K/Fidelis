@@ -13,14 +13,41 @@ mosaics:
     # HiRISE orthorectified image mosaic, 0.25 m/pixel, 8-bit, 6.9 GB. doi:10.5066/P9QJDP48
     url: https://planetarymaps.usgs.gov/mosaic/mars2020_trn/HiRISE/JEZ_hirise_soc_006_orthoMosaic_25cm_Eqc_latTs0_lon0_first.tif
     sha256: 83f3faeabc87ba54db9af278611bd070494a0b0d43757108c871c763943e80d9
+  # The CTX ring around the HiRISE tile (issue #33; docs/research/ctx-terrain-for-a-wider-tile.md).
+  # Same projection as HiRISE, but NOT the same pixel grid: the CTX origin is 0.749 m east and
+  # 3.140 m north of a 6 m HiRISE pixel corner (read from both GeoTIFF headers, 2026-11-02).
+  ctx_dtm:
+    # CTX DTM mosaic, 20 m/pixel, 32-bit, 9.7 MB. doi:10.5066/P906QQT8
+    url: https://planetarymaps.usgs.gov/mosaic/mars2020_trn/CTX/JEZ_ctx_B_soc_008_DTM_MOLAtopography_DeltaGeoid_20m_Eqc_latTs0_lon0.tif
+    # Pinned from the first download (2026-11-02).
+    sha256: 16a1aa66c3f48c1bca252795827db7b417876217aff0f5e1aff18027fab2327b
+  ctx_ortho:
+    # CTX orthoimage mosaic, 6 m/pixel, 8-bit, 36.3 MB: the LVS map itself, per USGS. doi:10.5066/P9GV1ND3
+    url: https://planetarymaps.usgs.gov/mosaic/mars2020_trn/CTX/JEZ_ctx_B_soc_008_orthoMosaic_6m_Eqc_latTs0_lon0.tif
+    sha256: 842b457afee7c2672022b66e3f60be836c6d52e99474015bfd9ced60099b8615
 
-# Both mosaics cover this box (planetocentric, east longitude), per their USGS pages.
-# Matcher training data must stay well clear of it (spec: no Jezero leakage).
+# Both HiRISE mosaics cover this box (planetocentric, east longitude), per their USGS pages.
 mosaic_footprint:
   lat_min: 18.3068
   lat_max: 18.6693
   lon_min: 77.2229
   lon_max: 77.584
+
+# Both CTX mosaics cover this box, per their FGDC metadata (DTM east edge 77.6990, ortho 77.6992).
+ctx_footprint:
+  lat_min: 18.2110
+  lat_max: 18.7212
+  lon_min: 77.1605
+  lon_max: 77.6992
+
+# No Jezero leakage (spec): matcher training and validation data must stay out of this box.
+# It holds everything the test scene can show: both mosaic footprints, so the whole CTX ring.
+# tests/terrain/test_scene.py checks the scene and both footprints sit inside it.
+jezero_exclusion:
+  lat_min: 18.2110
+  lat_max: 18.7212
+  lon_min: 77.1605
+  lon_max: 77.6992
 
 # Spherical Mars radius of the mosaics' projection (USGS pages: "Radius A/C 3396190").
 mars_radius_m: 3396190
@@ -51,6 +78,17 @@ tile:
   mesh_resolution_m: 4.0
   texture_resolution_m: 2.0
 
+# The wide scene (src/fidelis/terrain/scene.py): the tile above in the middle, a CTX ring
+# around it, both meshed in the tile's frame with Mars's curvature (#33).
+scene:
+  # Map metres. The ring's mesh reaches at least half this from the tile centre every way:
+  # 13 km north-south, 12.3 km east-west on the ground. Valid CTX reaches a 27.7 km square.
+  size_m: 26000
+  # The HiRISE tile eases into CTX (heights and texture) across this band inside its edge.
+  # CTX - HiRISE heights: median +0.54 m, sd 4.1 m (research note), so a 200 m ramp tilts
+  # the ground by at most a few percent. A Fidelis choice.
+  blend_band_m: 200
+
 matching_map:
   # The map is the orthoimage averaged down to the LVS map's resolution.
   lvs_map_resolution:
@@ -71,26 +109,33 @@ matching_map:
 
 # Per-descent random inputs (src/fidelis/scenario.py). Sources and reasoning:
 # docs/research/edl-dispersions-for-scenario-sampler.md. Every distribution is bounded,
-# and load_config refuses any whose worst case could see past the tile: the highest
-# altitude plus terrain_relief_m, at the largest tilt, through the image corner, from the
-# largest offset. On this 10 km tile that check, not Mars, caps tilt and offset well
-# below flight values; a CTX-ringed ~26 km scene would lift the cap (issue #33).
+# and load_config refuses any whose worst case could see past the scene (scene.size_m):
+# the highest altitude plus terrain_relief_m, at the largest tilt, through the image corner,
+# from the largest offset. On the 10 km tile alone that check capped tilt at 3 deg and
+# offset at +-400 m; the CTX-ringed scene (#33) lifts the cap to the values below.
 scenario:
   # LCAM: 90 x 90 deg (Maki et al. 2020; docs/camera-conventions.md).
   camera_fov_deg: 90
-  # DTM elevation spans -2652.1 to -2393.2 m over the tile (docs/benchmarks/terrain-mesh.md).
-  terrain_relief_m: 259
+  # How much lower a view's edge can be than the ground under the camera: the HiRISE tile's
+  # highest ground down to the scene's lowest, curvature included. Measured 351.3 m
+  # (fidelis-scene's drop_below_tile_m, 2026-11-02), rounded up. Valid while the camera is
+  # over the tile, which load_config enforces. The crater rim (whole-scene relief 1203 m) is
+  # uphill, which only shortens views.
+  terrain_relief_m: 352
   # Above the ground beneath the camera. Brackets the sourced handoff values: "approximately
   # 2200m" (Johnson et al. 2022), back-shell separation 2276 m flown, final-fix image an
   # inferred 2.36-2.44 km. Uniform is a Fidelis choice; no spread is published.
   altitude_m: {dist: uniform, low: 2200, high: 2450}
   # True position, ground metres from the tile centre. sd from the pre-flight 99% landing
-  # ellipse (7.1 x 6.5 km, Way et al. 2020) as sigma ~ 1.1 km. TILE-CLIPPED to +-400 m.
-  offset_east_m: {dist: truncnorm, mean: 0, sd: 1100, low: -400, high: 400}
-  offset_north_m: {dist: truncnorm, mean: 0, sd: 1100, low: -400, high: 400}
+  # ellipse (7.1 x 6.5 km, Way et al. 2020) as sigma ~ 1.1 km. Truncated at 2.5 sigma
+  # (keeps 98.8% of the normal), a Fidelis choice the scene leaves room for.
+  offset_east_m: {dist: truncnorm, mean: 0, sd: 1100, low: -2750, high: 2750}
+  offset_north_m: {dist: truncnorm, mean: 0, sd: 1100, low: -2750, high: 2750}
   # Off nadir. Flight pitch swung about -12 to +5 deg; pre-flight simulations averaged
-  # 7-18 deg (Johnson et al. 2020, 2022, read from plots). TILE-CLIPPED to 3 deg.
-  tilt_deg: {dist: uniform, low: 0, high: 3}
+  # 7-18 deg (Johnson et al. 2020, 2022, read from plots). Up to the top of that range;
+  # uniform is a Fidelis choice. Worst case reaches about 11.8 km of the scene's 12.3 km
+  # east-west half-width (20 deg would not fit).
+  tilt_deg: {dist: uniform, low: 0, high: 18}
   # No source gives either; heading drifted ~70 deg in 35 s on the parachute. Fidelis choice.
   tilt_azimuth_deg: {dist: uniform, low: 0, high: 360}
   heading_deg: {dist: uniform, low: 0, high: 360}

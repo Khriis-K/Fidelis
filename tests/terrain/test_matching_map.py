@@ -10,6 +10,7 @@ from rasterio.transform import from_origin
 from fidelis.terrain.matching_map import (
     block_mean,
     build_matching_map,
+    build_scene_map,
     downsample_factor,
     main,
     require_same_resolution,
@@ -166,3 +167,71 @@ def test_the_map_record_says_how_wide_its_pixels_are_on_the_ground(tmp_path, mon
     assert record["resolution_m"] == 6.0
     assert record["east_west_ground_scale"] == 0.9
     assert record["ground_resolution_m"] == {"east_west": pytest.approx(5.4), "north_south": 6.0}
+
+
+# --- the wide scene: one map over the inner tile and the CTX ring (#33) -------------------
+
+# Inner texture: 2 m pixels over 120 m from (1200, 3600). Ring: 6 m pixels over 480 m,
+# on a grid 0.75 m east and 3.14 m north of the inner one's, like the real CTX mosaic.
+RING_LEFT, RING_TOP = 1200.0 - 180.0 + 0.75, 3600.0 + 180.0 + 3.14
+
+
+def ring_ramp(mx, my):
+    """Ring brightness that bilinear resampling reproduces exactly."""
+    return 60.0 + 0.2 * (mx - RING_LEFT) + 0.1 * (RING_TOP - my)
+
+
+@pytest.fixture
+def scene_textures(tmp_path):
+    inner = (np.arange(60 * 60).reshape(60, 60) % 200 + 20).astype(np.uint8)
+    write_ortho(tmp_path / "ortho.tif", inner, 2.0)
+    cols, rows = np.meshgrid(np.arange(80), np.arange(80))
+    ring = ring_ramp(RING_LEFT + (cols + 0.5) * 6.0, RING_TOP - (rows + 0.5) * 6.0)
+    write_ortho(tmp_path / "ring_ortho.tif", np.rint(ring).astype(np.uint8), 6.0, left=RING_LEFT, top=RING_TOP)
+    return inner, tmp_path / "ortho.tif", tmp_path / "ring_ortho.tif"
+
+
+def test_the_scene_map_sits_on_the_inner_grid_inside_the_ring(scene_textures, tmp_path):
+    _, inner, ring = scene_textures
+    build_scene_map(inner, ring, 6.0, tmp_path / "map.tif")
+
+    with rasterio.open(tmp_path / "map.tif") as m, rasterio.open(ring) as r:
+        assert m.res == (6.0, 6.0)
+        # On the inner tile's 6 m lattice (1200, 3600 + k * 6), and inside the ring's data.
+        for edge, origin in ((m.bounds.left, 1200.0), (m.bounds.top, 3600.0)):
+            assert (edge - origin) / 6.0 == pytest.approx(round((edge - origin) / 6.0), abs=1e-9)
+        assert r.bounds.left <= m.bounds.left and m.bounds.right <= r.bounds.right
+        assert r.bounds.bottom <= m.bounds.bottom and m.bounds.top <= r.bounds.top
+        # Shrinking to the lattice loses less than a pixel per side.
+        assert m.bounds.left - r.bounds.left < 6.0 and r.bounds.top - m.bounds.top < 6.0
+
+
+def test_the_scene_map_is_the_inner_texture_averaged_inside_and_the_ring_resampled_outside(scene_textures, tmp_path):
+    image, inner, ring = scene_textures
+    build_scene_map(inner, ring, 6.0, tmp_path / "map.tif")
+
+    with rasterio.open(tmp_path / "map.tif") as m:
+        data, t = m.read(1), m.transform
+    col0, row0 = ~t @ (1200.0, 3600.0)
+    col0, row0 = round(col0), round(row0)
+    np.testing.assert_array_equal(data[row0 : row0 + 20, col0 : col0 + 20], block_mean(image, 3, nodata=0))
+
+    outside = np.ones(data.shape, bool)
+    outside[row0 : row0 + 20, col0 : col0 + 20] = False
+    cols, rows = np.meshgrid(np.arange(data.shape[1]), np.arange(data.shape[0]))
+    mx, my = t @ (cols + 0.5, rows + 0.5)
+    np.testing.assert_allclose(data[outside].astype(float), ring_ramp(mx, my)[outside], atol=1.0)
+
+
+def test_the_map_cli_builds_the_scene_map_when_there_is_a_ring(scene_textures, tmp_path, monkeypatch):
+    (tmp_path / "tile.json").write_text(json.dumps({"east_west_ground_scale": 0.9}))
+    (tmp_path / "ring.json").write_text(json.dumps({"blend_band_m": 40.0}))
+    out = tmp_path / "map" / "map.tif"
+    config = REPO / "config/jezero.yaml"
+    monkeypatch.setattr(sys, "argv", ["fidelis-matching-map", str(config), str(tmp_path), str(out)])
+
+    assert main() == 0
+
+    with rasterio.open(out) as m, rasterio.open(tmp_path / "ortho.tif") as inner:
+        assert m.bounds.left < inner.bounds.left and m.bounds.top > inner.bounds.top
+    assert json.loads(out.with_suffix(".json").read_text())["ring_source"].endswith("ring_ortho.tif")
