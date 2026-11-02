@@ -85,8 +85,9 @@ scene:
   # 13 km north-south, 12.3 km east-west on the ground. Valid CTX reaches a 27.7 km square.
   size_m: 26000
   # The HiRISE tile eases into CTX (heights and texture) across this band inside its edge.
-  # CTX - HiRISE heights: median +0.54 m, sd 4.1 m (research note), so a 200 m ramp tilts
-  # the ground by at most a few percent. A Fidelis choice.
+  # CTX - HiRISE heights over the tile: median +0.32 m, sd 3.11 m (fidelis-scene, 2026-11-02;
+  # docs/benchmarks/wide-scene.md). Over a 200 m ramp a typical few-metre difference adds
+  # a slope of a few percent; the largest isn't measured. A Fidelis choice.
   blend_band_m: 200
 
 matching_map:
