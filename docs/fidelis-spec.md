@@ -170,7 +170,7 @@ The navigator is fine-tuned only on terrain from six other Mars regions, so Jeze
 
 **Seam 1: Simulation interface (primary)**
 
-- The same scenario sample and seed produce the same navigation error.
+- The same scenario sample and seed produce the same navigation error on the CPU, and the same camera image (within 1e-5) on the GPU. GPU renders jitter by about 1e-6, which the navigator amplifies into up to about 0.6 m of error, so GPU errors are compared statistically, not run against run (`docs/benchmarks/plain-mc.md`).
 - A perfect-conditions scenario (no image noise or blur, nadir camera, sun angle matching the orbital map) produces navigation error below a small tolerance.
 - Measured per-sample cost increases with fidelity level.
 - Outputs at different fidelity levels for the same scenario samples are positively correlated.

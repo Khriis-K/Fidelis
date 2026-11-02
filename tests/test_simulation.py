@@ -271,10 +271,13 @@ def test_perfect_conditions_on_the_jezero_mesh_locate_within_half_a_ctx_map_pixe
     assert first.status == "ok"
     assert first.error_m < 3.0
     assert first.gpu != "cpu"
-    # Same sample and seed, same error, within one process. Across processes the GPU path
-    # drifted up to 0.54 m on the first plain MC run (docs/benchmarks/plain-mc.md); the
-    # renderer repeats to 1e-6, so the cause is likely matching, not yet confirmed.
-    second = sim.run(s, "mesh").record
-    np.testing.assert_allclose(second.error_vector, first.error_vector, atol=0.05)
+    # Same sample and seed, same camera image, up to the renderer's GPU jitter (under 1e-6
+    # of radiance; up to 3.6e-7 measured on camera images). Not the same error: the navigator
+    # turns that jitter into up to ~0.6 m, even within one process, so the error can't be
+    # compared (docs/benchmarks/plain-mc.md). With camera noise on, a seed that didn't fix
+    # the noise would differ by about the noise level, 1e-3, which 1e-5 catches.
+    noisy = scenario(offset_east_m=150.0, offset_north_m=-230.0, altitude_m=altitude, noise_sd=0.005)
+    once, again = sim.run(noisy, "mesh"), sim.run(noisy, "mesh")
+    assert np.abs(again.image - once.image).max() < 1e-5
     # Records stay JSON-safe on the GPU path too.
     assert SimulationRecord(**json.loads(json.dumps(asdict(first)))) == first
