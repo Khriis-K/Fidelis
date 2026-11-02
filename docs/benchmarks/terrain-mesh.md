@@ -36,4 +36,4 @@ The Jezero ground-truth mesh (`snakemake jezero_mesh`, code in `src/fidelis/terr
 
 The PLY stores UVs with v = 0 at the image's **bottom** row, the convention MeshLab, Blender and three.js use. Mitsuba 3.9's PLY loader keeps UVs as written, but its bitmap textures put v = 0 at the **top** row. So `mitsuba_shape()` flips v on lookup (`to_uv`). Load the mesh into Mitsuba through that function, not as a bare `ply` shape, or the texture comes out mirrored north–south.
 
-`mitsuba_shape()` also loads the texture raw (no sRGB decoding), on the assumption that the orthoimage's 8-bit values scale reflectance linearly. Issue #5 (mesh rendering) should confirm that against the USGS product description before tuning lighting.
+`mitsuba_shape()` also loads the texture raw (no sRGB decoding), on the assumption that the orthoimage's 8-bit values scale reflectance linearly. Issue #5 checked the USGS product description: the values are tone-matched DN, not calibrated reflectance (`docs/benchmarks/mesh-render.md`).

@@ -2,7 +2,7 @@
 
 A refresher for explaining Fidelis to recruiters. Plain English first, key technical terms kept.
 
-> **Status:** early development. The Python environment and a smoke test of every core library exist (`docs/environment.md`). All five pass on the dev laptop and on L40S and A100 GPUs on USC's CARC cluster, run through the same Snakemake workflow. The workflow also builds the Jezero test scene: it downloads the USGS data, cuts a 2 km tile, makes the CTX-like matching map, and turns the tile into a textured 3D terrain mesh (checks in `docs/benchmarks/terrain-mesh.md`). Everything else below describes the *planned* system from `docs/fidelis-spec.md`, and nothing has been measured yet.
+> **Status:** early development. The Python environment and a smoke test of every core library exist (`docs/environment.md`). All five pass on the dev laptop and on L40S and A100 GPUs on USC's CARC cluster, run through the same Snakemake workflow. The workflow also builds the Jezero test scene: it downloads the USGS data, cuts a 2 km tile, makes the CTX-like matching map, and turns the tile into a textured 3D terrain mesh (checks in `docs/benchmarks/terrain-mesh.md`). A path-traced renderer draws that mesh as the descent camera would see it, from any pose and under any sun, in about 0.05 s per 1024 × 1024 image on the laptop GPU (`docs/benchmarks/mesh-render.md`). Everything else below describes the *planned* system from `docs/fidelis-spec.md`, and nothing has been measured yet.
 
 ## The two-minute pitch
 
@@ -46,6 +46,10 @@ A refresher for explaining Fidelis to recruiters. Plain English first, key techn
 
 **Textured mesh, UV coordinates, and float32 precision**: a terrain mesh is a surface made of triangles, one corner (vertex) per height sample. A texture is an image draped over it. Each vertex carries a UV coordinate, its position in the image from 0 to 1 across and up, which says which part of the image paints that spot. GPUs store positions as float32, which keeps about 7 significant digits. *In Fidelis:* the Jezero mesh has a vertex at every 1 m DTM pixel (4 million of them), so it matches the DTM exactly at its samples. It's built around the tile centre: in raw map coordinates (around 4.6 million metres east), float32 could only place vertices to the nearest half metre.
 
+**Path tracing and samples per pixel**: path tracing makes an image by following light rays backwards from the camera into the scene, bouncing off surfaces, and checking at each hit whether the sun is visible. Shadows come out right because they're computed, not painted on. Each pixel averages many random rays (samples per pixel, spp); fewer samples is faster but grainier. *In Fidelis:* Mitsuba 3 path-traces the terrain mesh. At 64 spp a descent image takes about 0.05 s on the laptop and is within about 1.2–1.6% (RMS) of a 1024-spp render. With the same random seed the image repeats to within 1e-6.
+
+**Camera pose and intrinsics**: a pose says where a camera is and which way it points (a position plus a rotation). Intrinsics say how it maps directions to pixels: focal length and the principal point, where the optical axis hits the image. *In Fidelis:* the renderer, splat training and the navigator all have to mean the same thing by a pose, or a perfect navigator would still report errors. Everything uses OpenCV's convention (x right, y down, z forward), written down in `docs/camera-conventions.md`. The descent camera copies Perseverance's LCAM: 1024 × 1024 pixels, 90° field of view (Maki et al. 2020).
+
 ## Challenges and how we solved them
 
 <!-- Format: ### Title — then: the problem, how we noticed, what we did, what it taught us. -->
@@ -80,6 +84,16 @@ A refresher for explaining Fidelis to recruiters. Plain English first, key techn
 
 **What it taught us.** When two tools share a file format, check the convention each one reads, not the one the format spec implies. And test through the consumer that actually matters (here, the renderer), on data built so a mistake can't look plausible.
 
+### Making the renderer and the navigator agree on what a camera pose means
+
+**The problem.** Fidelis renders descent images with Mitsuba and later asks the navigator (OpenCV's PnP) to recover the camera position from them. If the two disagree about a pose by even a flipped axis or half a pixel, the navigator gets "wrong" answers that are really a bookkeeping error, and the failure estimate inherits it. Mitsuba's camera frame isn't OpenCV's: it points +x left and +y up, and counts pixel centres from 0.5 instead of 0.
+
+**How we noticed.** Before trusting the conversion, a test renders small glowing spheres from a tilted, rolled camera with its optical centre deliberately off the image centre, and requires each sphere's image to land within 0.1 pixel of where OpenCV's own projection says it should. The first run missed by about 14 pixels in a telltale way: every sphere was mirrored about the image centre by exactly the principal-point offset. Mitsuba's `principal_point_offset` setting runs the opposite way to pixel coordinates.
+
+**What we did.** Flipped the sign, and the test now holds to 0.1 pixel for all three spheres. The conventions are written down in `docs/camera-conventions.md` so splat training and the navigator reuse them rather than re-deriving them.
+
+**What it taught us.** Check a convention against the other library's own code (here `cv2.projectPoints`), not against your reading of its docs. And make the test geometry asymmetric, with an off-centre principal point and a rolled camera, so that a mirrored or swapped convention can't pass by symmetry.
+
 ## Headline results
 
 None yet. Numbers go here only once they're committed in `docs/benchmarks/` or `docs/adr/`, each with its caveat.
@@ -91,3 +105,7 @@ None yet. Numbers go here only once they're committed in `docs/benchmarks/` or `
 - **The CTX-like map is an approximation.** It's the HiRISE orthoimage averaged in 24×24 blocks. That removes detail CTX can't see, but it doesn't model CTX's optics, noise, or different viewing geometry, and it isn't the real onboard LVS map.
 
 - **The terrain is only as detailed as the 1 m DTM.** Rocks and ridges smaller than a metre exist in the photo texture but not in the geometry, so they don't cast their own shadows when relit. The texture also still holds the shadows from the moment HiRISE took the picture; removing those is a separate step (issue #19).
+
+- **Rendered shadows are too dark, and the brightness isn't physical.** The renderer has a sun but no sky, so shadows only get light bounced off nearby terrain; on Mars, dusty sky light fills them in. And the orthoimage's pixel values are tone-matched brightness, not calibrated reflectance, so the renderer's output is relative brightness, not physical radiance.
+
+- **The 2 km tile limits camera altitude.** The descent camera's 90° field of view sees twice its altitude across, so above about 1 km it sees past the edge of the terrain model. LVS imaged during parachute descent, at altitudes we haven't sourced yet. If those are above 1 km, either the tile grows or the simulated descents stay lower than the real ones (`docs/benchmarks/mesh-render.md`).
