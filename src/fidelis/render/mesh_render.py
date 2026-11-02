@@ -120,7 +120,8 @@ class MeshRenderer:
         self.mesh_dir, self.suns, self.spp = Path(mesh_dir), list(suns), spp
         self._scene, self._sun_index = None, None
 
-    def __call__(self, pose: CameraPose, intrinsics: Intrinsics, sun_index: int, seed: int) -> np.ndarray:
+    def use_sun(self, sun_index: int) -> None:
+        """Load that sun's scene, unless it's the one loaded. The simulator calls this untimed."""
         if not 0 <= sun_index < len(self.suns):
             raise ValueError(f"sun index {sun_index}; this renderer has {len(self.suns)} suns")
         if sun_index != self._sun_index:
@@ -130,6 +131,9 @@ class MeshRenderer:
             dr.flush_malloc_cache()
             self._scene = terrain_scene(self.mesh_dir, self.suns[sun_index])
             self._sun_index = sun_index
+
+    def __call__(self, pose: CameraPose, intrinsics: Intrinsics, sun_index: int, seed: int) -> np.ndarray:
+        self.use_sun(sun_index)
         image = render(self._scene, pose, intrinsics, self.spp, seed=seed)
         require_no_blank_lines(image)
         return image

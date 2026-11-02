@@ -154,9 +154,19 @@ A refresher for explaining Fidelis to recruiters. Plain English first, key techn
 
 **What it taught us.** Check results against ground truth, not against the system's own answer: a self-consistent check can't see an error the rest of the system absorbs. Also, a fix that resamples an image isn't free: on a small synthetic test, north-up located within 0.174 m but a 15° turn only within 0.795 m, and 45° within 0.496 m. On the Jezero renders the effect is hidden under a larger, still unexplained error of about 1.9 m.
 
+### A cost measurement that was really measuring file loading
+
+**The problem.** Every simulated descent records how long it took, because the multifidelity estimator later decides how many cheap and expensive samples to buy from those costs. A wrong cost means a wrong budget split, silently.
+
+**How we noticed.** The first 20-descent run's costs weren't one cluster: most took about 0.4 s, but five took about 2 s. Those five were exactly the first descent under each new sun angle. That's when the renderer loads that sun's copy of the 289 MB terrain mesh, and the loading was happening inside the timer. The code's own comment said the cost excluded loading; the data said otherwise. Comparing the two runs also showed the same seed doesn't give exactly the same error on the GPU (up to 0.54 m apart), which a single run can't reveal.
+
+**What we did.** The renderer now has a separate "load this sun" step that the simulator calls before starting the clock, and a test uses a fake renderer that takes 2 s to load to prove the recorded cost leaves it out. On the rerun, costs were 0.38–0.58 s, except the very first render of the process (0.92 s, probably one-time GPU warm-up). The repeatability gap is written down as a limitation to measure before the threshold is set.
+
+**What it taught us.** Look at the spread of a measurement, not just its average: the outliers lined up with an event (a scene load), and that pointed straight at the bug. And run things twice: one run can't show you that it isn't reproducible.
+
 ## Headline results
 
-None yet. The end-to-end plain Monte Carlo command exists (`snakemake plain_mc`), but its first run hasn't been made. Numbers go here only once they're committed in `docs/benchmarks/` or `docs/adr/`, each with its caveat.
+- **The pipeline runs end to end** (`docs/benchmarks/plain-mc.md`). 20 seeded descents over the Jezero mesh all got a fix, with errors of 1.38–6.12 m (median 2.73 m) at about 0.46 s per descent on the laptop GPU. Caveat: that's 0 failures in 20 at a *provisional* 12 m threshold, so the honest failure rate is "somewhere from 0 to 16%" (95% Wilson interval), and the descents are easier than flight. It proves the plumbing, not the reliability. Numbers go here only once they're committed in `docs/benchmarks/` or `docs/adr/`, each with its caveat.
 
 ## Honest limitations
 
@@ -179,6 +189,8 @@ None yet. The end-to-end plain Monte Carlo command exists (`snakemake plain_mc`)
 - **About 1.9 m of the perfect-conditions error is unexplained.** Near 2.2 km the fix sits 1.88 m off; near 4.2 km, 0.63 m. It's far below the 40 m that matters, so it wasn't chased. But it's big enough to hide a half-pixel coordinate bug from a test at that altitude alone (mutation testing caught exactly that), which is why the GPU test checks both ends of the band.
 
 - **The failure threshold r is provisional.** The first plain Monte Carlo command counts a descent as failed beyond 12 m (two 6 m map pixels), a placeholder we chose until the pilot study sets r so that 2–10% of descents fail. Any failure rate quoted before then is at that placeholder, and the outputs say so.
+
+- **A seed regenerates its descent to about half a metre on the GPU, not exactly.** Running the same 20 seeds twice moved each error by a median 0.08 m and at most 0.54 m. On the CPU it repeats exactly. The cause is probably GPU matching rather than rendering, but that's not confirmed (`docs/benchmarks/plain-mc.md`). It's small against r, but it can flip a sample sitting right at the threshold.
 
 - **Exposure is set from each image, not from a radiometric prediction.** Perseverance's exposure was fixed in advance from predictions. Our renderer's brightness isn't physical, so the "correct" exposure is taken from the image itself (its brightest 0.1% at full scale), and the scenario's exposure gain is the error on top. That's a stand-in for a prediction that was right before the error, not a model of how the prediction was made.
 

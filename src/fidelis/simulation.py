@@ -8,13 +8,14 @@ everything else about the descent comes back from the seed.
 
 Fidelity levels are renderers, by name: `"mesh"` (path-traced mesh) for now, with splat
 levels to come behind the same interface. A renderer is any callable
-`(pose, intrinsics, sun_index, seed) -> radiance image`.
+`(pose, intrinsics, sun_index, seed) -> radiance image`. One that loads a scene per sun
+may also have `use_sun(sun_index)`, which `run` calls before the clock starts, so the
+recorded cost is the per-sample price and not a scene load.
 
 The navigator gets the true attitude: attitude-knowledge (IMU) error isn't modelled
 (issue #34, docs/benchmarks/navigator.md).
 """
 
-import hashlib
 import math
 import time
 from collections.abc import Callable
@@ -31,6 +32,7 @@ from fidelis.nav.orbital_map import load_orbital_map
 from fidelis.render.camera import CameraPose, Intrinsics, look_at
 from fidelis.render.degrade import camera_image
 from fidelis.scenario import Scenario
+from fidelis.terrain.fetch import sha256_of
 
 Renderer = Callable[[CameraPose, Intrinsics, int, int], np.ndarray]
 
@@ -71,6 +73,7 @@ class SimulationRecord:
     gpu: str  # the device that did the work, "cpu" without one
     scenario: dict  # the scenario's inputs, without the seed
     # SHA-256 of the scene config: the seed reruns this descent only under the same config.
+    # None for a simulator built without one (tests); optional so older records still load.
     config_sha256: str | None = None
 
 
@@ -100,8 +103,11 @@ class Simulator:
             raise ValueError(f"unknown fidelity {fidelity!r}; this simulator has {sorted(self.renderers)}")
         ground_z = self.navigator.map.ground_height(scenario.offset_east_m, scenario.offset_north_m)
         pose = scenario_pose(scenario, ground_z)
+        renderer = self.renderers[fidelity]
+        if hasattr(renderer, "use_sun"):
+            renderer.use_sun(scenario.sun_index)
         start = time.perf_counter()
-        radiance = self.renderers[fidelity](pose, self.intrinsics, scenario.sun_index, scenario.seed)
+        radiance = renderer(pose, self.intrinsics, scenario.sun_index, scenario.seed)
         image = camera_image(radiance, scenario)
         nav = self.navigator.locate(image, self.intrinsics, pose.rotation)
         cost = time.perf_counter() - start
@@ -147,8 +153,4 @@ def build_mesh_simulator(config_path: Path, data_dir: Path, suns=None, device: s
     renderer = MeshRenderer(data_dir / "mesh", suns, spp=scene["simulation"]["mesh_spp"])
     intrinsics = Intrinsics.from_fov(LCAM_PX, LCAM_PX, scene["scenario"]["camera_fov_deg"])
     navigator = Navigator(orbital_map, device=device)
-    return Simulator({"mesh": renderer}, navigator, intrinsics, config_sha256=file_sha256(config_path))
-
-
-def file_sha256(path: Path) -> str:
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    return Simulator({"mesh": renderer}, navigator, intrinsics, config_sha256=sha256_of(config_path))

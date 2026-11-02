@@ -141,10 +141,15 @@ class Navigator:
         if to_image is not None and len(keypoints):
             keypoints = cv2.perspectiveTransform(keypoints.reshape(-1, 1, 2), to_image).reshape(-1, 2)
         image_points = keypoints[pairs[:, 0]]
-        map_points = self.map_features["keypoints"][0].cpu().numpy().astype(np.float64)[pairs[:, 1]]
+        map_points = self.map_keypoints[pairs[:, 1]]
 
         solution = solve_pose(image_points, self.map.pixel_to_world(map_points), intrinsics)
         return NavResult(solution.status, solution.pose, image_points, map_points, solution.inliers, keypoints)
+
+    @property
+    def map_keypoints(self) -> np.ndarray:
+        """M x 2, every map keypoint, in map pixels."""
+        return self.map_features["keypoints"][0].cpu().numpy().astype(np.float64)
 
     def _keep_valid(self, features: dict, valid: np.ndarray) -> dict:
         """Only the keypoints that land where `valid` is true."""

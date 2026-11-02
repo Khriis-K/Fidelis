@@ -3,7 +3,8 @@
 import pytest
 from test_workflow import CARC_GPU_TYPES, dry_run, planned_jobs
 
-TARGETS = ("plain_mc", "results/plain_mc/matches/seed_12.png")
+# --forceall: once a run's outputs exist, a plain dry run plans nothing and these would fail.
+TARGETS = ("plain_mc", "results/plain_mc/matches/seed_12.png", "--forceall")
 
 
 @pytest.mark.parametrize("profile", ["local", "carc"])

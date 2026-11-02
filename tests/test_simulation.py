@@ -5,6 +5,7 @@ real mesh renderer on Jezero."""
 import hashlib
 import json
 import math
+import time
 from dataclasses import asdict
 from pathlib import Path
 
@@ -17,7 +18,8 @@ from fidelis.nav.navigator import Navigator
 from fidelis.nav.orbital_map import OrbitalMap
 from fidelis.render.camera import CameraPose, Intrinsics
 from fidelis.scenario import Scenario
-from fidelis.simulation import SimulationRecord, Simulator, file_sha256, scenario_pose
+from fidelis.simulation import SimulationRecord, Simulator, scenario_pose
+from fidelis.terrain.fetch import sha256_of as file_sha256
 
 REPO = Path(__file__).resolve().parents[1]
 LEFT, TOP = 4589000.0, 1094000.0
@@ -191,6 +193,24 @@ def test_a_run_keeps_the_camera_image_and_the_matches_for_replay(simulator):
     assert run.image.shape == (K.height, K.width)
     assert run.nav.match_count == run.record.match_count
     assert run.nav.inlier_count == run.record.inlier_count
+
+
+def test_a_renderers_scene_loading_is_kept_out_of_the_samples_cost(simulator):
+    # Cost feeds MXMCPy's sample allocation: it's the per-sample price, not the price of
+    # loading a sun's scene, which a batch grouped by sun pays once.
+    class SlowToLoad:
+        loaded = None
+
+        def use_sun(self, sun_index):
+            time.sleep(2.0)
+            self.loaded = sun_index
+
+        def __call__(self, pose, intrinsics, sun_index, seed):
+            assert self.loaded == sun_index, "the scene wasn't loaded before the render"
+            return render_black(pose, intrinsics, sun_index, seed)
+
+    record = Simulator({"slow": SlowToLoad()}, simulator.navigator, K).run(scenario(sun_index=2), "slow").record
+    assert record.cost_s < 2.0
 
 
 def test_every_record_names_the_config_it_ran_under(simulator, tmp_path):

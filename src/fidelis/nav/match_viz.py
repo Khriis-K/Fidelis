@@ -45,9 +45,9 @@ def draw_matches(
     scale = height / map_image.shape[0]
     map_size = (round(map_image.shape[1] * scale), height)
     canvas = np.hstack([_grey_bgr(image), _grey_bgr(cv2.resize(map_image, map_size, interpolation=cv2.INTER_AREA))])
-    for points, offset, s in ((image_keypoints, 0, 1.0), (map_keypoints, width, scale)):
+    for points, offset, point_scale in ((image_keypoints, 0, 1.0), (map_keypoints, width, scale)):
         if points is not None and len(points):
-            cols, rows = np.round(np.asarray(points, float) * s + [offset, 0]).astype(int).T
+            cols, rows = np.round(np.asarray(points, float) * point_scale + [offset, 0]).astype(int).T
             keep = (cols >= 0) & (cols < canvas.shape[1]) & (rows >= 0) & (rows < height)
             canvas[rows[keep], cols[keep]] = KEYPOINT_BGR
     ends = np.asarray(map_points, float) * scale + [width, 0]
@@ -81,9 +81,8 @@ def main() -> int:
     error = "no fix" if record.error_m is None else f"error {record.error_m:.1f} m"
     caption = (
         f"seed {record.seed}, {record.fidelity}: {record.status}, {record.inlier_count}/{record.match_count}"
-        f" inliers, {error}; config {record.config_sha256[:8]}"
+        f" inliers, {error}; config {(record.config_sha256 or 'unknown')[:8]}"
     )
-    map_keypoints = simulator.navigator.map_features["keypoints"][0].cpu().numpy()
     canvas = draw_matches(
         run.image,
         simulator.navigator.map.image,
@@ -92,7 +91,7 @@ def main() -> int:
         nav.inliers,
         caption,
         image_keypoints=nav.keypoints,
-        map_keypoints=map_keypoints,
+        map_keypoints=simulator.navigator.map_keypoints,
     )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     tmp = args.out.with_name(args.out.stem + ".tmp" + args.out.suffix)
