@@ -242,9 +242,7 @@ def test_the_configured_tile_sits_inside_the_published_mosaic_footprint():
     assert min_y <= bottom < top <= max_y
 
 
-# LVS imaged from 4.2 km down to 2.2 km above the ground (NASA/JPL landing press kit,
-# pp. 21-22); a nadir 90 deg LCAM view covers 2 x altitude, at altitude / 512 per pixel.
-LVS_TOP_M, LVS_BOTTOM_M = 4200.0, 2200.0
+# A nadir 90 deg LCAM view covers 2 x altitude, at altitude / 512 per pixel at the centre.
 
 
 def test_the_configured_tile_holds_a_nadir_view_from_the_top_of_the_lvs_band():
@@ -253,10 +251,11 @@ def test_the_configured_tile_holds_a_nadir_view_from_the_top_of_the_lvs_band():
     _, y = lonlat_to_eqc(tile["center_lon"], tile["center_lat"], radius)
 
     # East-west is the short side in ground metres.
-    assert tile["size_m"] * east_west_ground_scale(y, radius) > 2 * LVS_TOP_M
+    assert tile["size_m"] * east_west_ground_scale(y, radius) > 2 * config["lvs_altitude_m"]["top"]
 
 
 def test_the_configured_mesh_and_texture_are_no_coarser_than_an_lcam_pixel_at_the_bottom_of_the_band():
-    tile = yaml.safe_load((REPO / "config/jezero.yaml").read_text())["tile"]
+    config = yaml.safe_load((REPO / "config/jezero.yaml").read_text())
+    tile = config["tile"]
 
-    assert tile["texture_resolution_m"] <= tile["mesh_resolution_m"] <= LVS_BOTTOM_M / 512
+    assert tile["texture_resolution_m"] <= tile["mesh_resolution_m"] <= config["lvs_altitude_m"]["bottom"] / 512

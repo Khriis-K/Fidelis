@@ -1,4 +1,5 @@
 import json
+import sys
 
 import mitsuba as mi
 import numpy as np
@@ -6,7 +7,7 @@ import pytest
 import rasterio
 from rasterio.transform import from_origin
 
-from fidelis.terrain.mesh import build_terrain_mesh, mitsuba_shape
+from fidelis.terrain.mesh import build_terrain_mesh, main, mitsuba_shape
 
 MARS_EQC = "+proj=eqc +lat_ts=0 +lon_0=0 +R=3396190 +units=m +no_defs"
 # Map metres far from zero, like the real tile (~4.59e6 m east), so float32 precision bites.
@@ -172,6 +173,23 @@ def test_the_record_is_written_beside_the_mesh(tile, tmp_path):
 
     assert json.loads((tmp_path / "mesh" / "mesh.json").read_text()) == record
     assert record["crs"]
+
+
+def test_the_cli_takes_the_east_west_scale_from_the_tile_record(tile, tmp_path, monkeypatch):
+    # fidelis-tile writes the scale; a key mismatch here would only show up in the pipeline.
+    (tmp_path / "tile.json").write_text(json.dumps({"east_west_ground_scale": 0.9}))
+    monkeypatch.setattr(sys, "argv", ["fidelis-mesh", str(tmp_path), str(tmp_path / "mesh")])
+
+    assert main() == 0
+
+    record = json.loads((tmp_path / "mesh" / "mesh.json").read_text())
+    assert record["east_scale"] == 0.9
+    local = np.frombuffer(
+        (tmp_path / "mesh" / "mesh.ply").read_bytes().split(b"end_header\n")[1],
+        dtype="<f4",
+        count=record["vertex_count"] * 5,
+    ).reshape(*DTM_SHAPE, 5)
+    np.testing.assert_allclose(np.diff(local[:, :, 0], axis=1), 0.9, atol=1e-5)
 
 
 def test_a_dtm_with_nodata_is_rejected(tile, tmp_path):

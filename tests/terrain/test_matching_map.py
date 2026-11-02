@@ -1,10 +1,21 @@
+import json
+import sys
+from pathlib import Path
+
 import numpy as np
 import pytest
 import rasterio
 from rasterio.transform import from_origin
 
-from fidelis.terrain.matching_map import block_mean, build_matching_map, downsample_factor, require_same_resolution
+from fidelis.terrain.matching_map import (
+    block_mean,
+    build_matching_map,
+    downsample_factor,
+    main,
+    require_same_resolution,
+)
 
+REPO = Path(__file__).resolve().parents[2]
 MARS_EQC = "+proj=eqc +lat_ts=0 +lon_0=0 +R=3396190 +units=m +no_defs"
 
 
@@ -138,3 +149,20 @@ def test_build_matching_map_keeps_the_footprint_and_coarsens_the_pixels(tmp_path
     assert info["factor"] == 24
     assert info["resolution_m"] == 6.0
     assert info["shape"] == [2, 3]
+
+
+def test_the_map_record_says_how_wide_its_pixels_are_on_the_ground(tmp_path, monkeypatch):
+    # Map pixels are 6 map metres; east-west that's 6 x cos(latitude) ground metres, and a
+    # matcher comparing against LCAM's ground metres needs to know it.
+    write_ortho(tmp_path / "ortho.tif", np.full((48, 72), 100, dtype=np.uint8), 0.25)
+    (tmp_path / "tile.json").write_text(json.dumps({"east_west_ground_scale": 0.9}))
+    out = tmp_path / "map" / "map.tif"
+    config = REPO / "config/jezero.yaml"
+    monkeypatch.setattr(sys, "argv", ["fidelis-matching-map", str(config), str(tmp_path), str(out)])
+
+    assert main() == 0
+
+    record = json.loads(out.with_suffix(".json").read_text())
+    assert record["resolution_m"] == 6.0
+    assert record["east_west_ground_scale"] == 0.9
+    assert record["ground_resolution_m"] == {"east_west": pytest.approx(5.4), "north_south": 6.0}

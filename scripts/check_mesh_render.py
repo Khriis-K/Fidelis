@@ -4,7 +4,7 @@ A nadir LCAM-like camera (1024 x 1024 px, 90 deg field of view) at the top and b
 of the LVS imaging band, 4.2 and 2.2 km above the tile's mean ground, under five suns
 (east and west at 10 and 30 deg, south at 60 deg). For each sun: scene load time, GPU
 memory, and per altitude render time per image, same-seed and other-seed differences,
-and noise against a 1024 spp reference. Every render must pass the blank-row check.
+and noise against a 1024 spp reference. Every render must pass the blank-line check.
 Writes one PNG per sun and altitude into OUT_DIR, plus two panels of the central
 256 x 256 px at 2.2 km: shadows_low_sun.png (east and west at 10 deg) and shading.png
 (the other three).
@@ -24,9 +24,10 @@ from pathlib import Path
 import cv2
 import mitsuba as mi
 import numpy as np
+import yaml
 
 from fidelis.render.camera import Intrinsics, look_at
-from fidelis.render.mesh_render import Sun, render, require_no_blank_rows, terrain_scene
+from fidelis.render.mesh_render import Sun, render, require_no_blank_lines, terrain_scene
 
 mesh_dir, out_dir = Path(sys.argv[1]), Path(sys.argv[2])
 out_dir.mkdir(parents=True, exist_ok=True)
@@ -50,9 +51,10 @@ z = np.frombuffer(raw, dtype="<f4", count=rec["vertex_count"] * 5, offset=body).
 ground = float(z.mean())
 del raw
 
-# LVS imaged from 4.2 km down to 2.2 km (NASA/JPL landing press kit, pp. 21-22).
+# The top and bottom of LVS's imaging band (config/jezero.yaml, from the NASA/JPL press kit).
 # A 90 deg view sees 2 x altitude across: 8.4 and 4.4 km of the 10 km tile.
-ALTITUDES = {"4.2km": 4200.0, "2.2km": 2200.0}
+band = yaml.safe_load((Path(__file__).resolve().parents[1] / "config/jezero.yaml").read_text())["lvs_altitude_m"]
+ALTITUDES = {f"{band[end] / 1000:.1f}km": float(band[end]) for end in ("top", "bottom")}
 SPP = 64
 poses = {
     name: look_at(eye=[0.0, 0.0, ground + alt], target=[0.0, 0.0, ground], up=[0.0, 1.0, 0.0])
@@ -74,7 +76,7 @@ print(
 
 
 def checked(image):
-    require_no_blank_rows(image)
+    require_no_blank_lines(image)
     return image
 
 
@@ -125,7 +127,7 @@ crop = (slice(384, 640), slice(384, 640))  # the central 256 x 256 px, about 1.1
 panels = {"shadows_low_sun.png": ["east-10", "west-10"], "shading.png": ["east-30", "west-30", "south-60"]}
 for file, names in panels.items():
     # Each panel gets its own exposure: the 10 deg suns are about 3x dimmer than 30 deg.
-    views = [images[n, "2.2km"][crop] for n in names]
+    views = [images[n, list(ALTITUDES)[-1]][crop] for n in names]
     s = 255 / np.percentile(np.concatenate([v.ravel() for v in views]), 99.5)
     panel = np.concatenate([np.clip(v * s, 0, 255) for v in views], axis=1).astype(np.uint8)
     cv2.imwrite(str(out_dir / file), cv2.resize(panel, None, fx=2, fy=2, interpolation=cv2.INTER_NEAREST))

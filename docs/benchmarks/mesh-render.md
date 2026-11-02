@@ -12,19 +12,22 @@ Perseverance's Lander Vision System imaged from **4.2 km down to 2.2 km** above 
 
 | | 4.2 km | 2.2 km |
 |---|---|---|
-| Render, median over five suns' medians | 0.056–0.057 s (min 0.055, max 0.062) | 0.053–0.054 s (min 0.052, max 0.057) |
+| Render, median over five suns' medians | 0.056–0.058 s (min 0.055, max 0.060) | 0.054–0.056 s (min 0.053, max 0.067) |
 | 1024 spp render | 0.79–0.81 s | 0.76–0.78 s |
 | RMS vs 1024 spp, at 64 spp | 1.1–2.2% of median pixel | 0.9–1.4% |
-| Same-seed max pixel difference | up to 3.0e-7 | up to 2.4e-7 |
+| Same-seed max pixel difference | up to 2.4e-7 | up to 1.8e-7 |
 | Pixels below 10% of median (shadow) | 0.0–4.1% | 0.1–4.7% |
 
-- **GPU memory: +2,084 MiB once the scene is loaded, +2,102 MiB after rendering** (nvidia-smi, whole GPU, against 0 MiB in use before; 8,151 MiB total). It doesn't grow between suns: each scene is dropped before the next loads.
-- **Scene load: 1.4–1.9 s** for the 289 MB mesh. The first render in the process took 0.60 s while kernels compiled.
-- **Every render passed the blank-row check** (`require_no_blank_rows`, 90 images: nine per sun and altitude). The research run at 2 m mesh / 1 m texture filled the GPU (+7.7 GB) and returned streaked, partly black images without raising (`docs/research/descent-altitude-and-tile-size.md`). The check makes that failure loud. It also fires when whole rows see past the mesh's edge, since there's no sky light: a unit test's view that framed 0.5 m beyond the mesh failed it on its edge rows.
+- **GPU memory: +2,084 MiB (2.19 GB) once the scene is loaded, +2,102 MiB (2.20 GB) after rendering** (nvidia-smi, whole GPU, against 0 MiB in use before; 8,151 MiB total). It doesn't grow between suns: each scene is dropped before the next loads.
+- **Scene load: 1.5–1.9 s** for the 289 MB mesh. The first render in the process took 0.12 s with Dr.Jit's kernel cache warm (0.60 s on the first run of the day).
+- Table from the second run (after adding the column check); the first run's medians were within 2 ms of these and its same-seed differences reached 3.0e-7.
+- **Every render passed the blank-line check** (`require_no_blank_lines`: no row or column of exact zeros; 90 images, nine per sun and altitude). The research run at 2 m mesh / 1 m texture filled the GPU (+7.7 GB) and returned streaked, partly black images without raising (`docs/research/descent-altitude-and-tile-size.md`). The check is aimed at that failure, but it was never run on those images, which weren't kept. So whether their damage was exact zeros along whole lines is unknown. It also fires when whole rows or columns see past the mesh's edge, since there's no sky light: a unit test's view that framed 0.5 m beyond the mesh fails it.
 - Same-seed differences stay under the 1e-6 tolerance below.
 - Visual check (2026-11-01): `nadir_4.2km_*.png` and `nadir_2.2km_*.png` in `data/jezero/render/` show the delta front and its scarp in the upper left, craters and dune fields, with no streaks or black bands. `shadows_low_sun.png` and `shading.png` are now the central 256 × 256 px of the 2.2 km views (about 1.1 km across).
 
-**Room for tilt and offset.** The mesh's ground half-widths are 4,751 m east–west and 5,008 m north–south. A nadir view at 4.2 km needs 4,200 m, leaving **about 550 m** east–west (about 3.5° of tilt, or 550 m of offset); at 2.2 km it leaves about 2,550 m. A scenario that tilts or shifts further sees off the mesh. The blank-row check only notices when whole image rows go blank (past the north or south edge in a north-up view); blank columns or corners pass it, so the scenario sampler (#6) needs its own off-mesh check.
+**Room for tilt and offset.** The mesh's ground half-widths are 4,751 m east–west and 5,008 m north–south. A nadir view at 4.2 km needs 4,200 m, leaving **about 550 m** east–west (about 3.5° of tilt, or 550 m of offset); at 2.2 km it leaves about 2,550 m. That's for a north-up view over ground at the mesh's mean height: turning the camera swings its corners outward (past about 8° of heading at 4.2 km a corner leaves the mesh), and ground lower than the mean (down to 99 m lower here) widens the footprint. A scenario that goes further sees off the mesh. The blank-line check fails views that lose a whole edge of the image, but a clipped corner passes it, so the scenario sampler (#6) needs its own off-mesh check.
+
+**Curvature isn't modelled.** The mesh is flat, while Mars falls away from it by d² / 2R: 3.7 m at 5 km from the centre (R = 3,396,190 m), below a 4.3–8.2 m descent-camera pixel. A low, oblique view would put the horizon in the wrong place.
 
 **Caveats:** one laptop GPU, nadir views only, five suns. CARC GPUs (40–80 GB) would hold a finer mesh, which wasn't tried. GPU memory is the whole GPU's, so another process using the GPU would show up in it.
 

@@ -22,6 +22,7 @@ import rasterio
 from rasterio.transform import Affine
 from rasterio.warp import Resampling, reproject
 
+from fidelis.render.mesh_render import require_no_blank_lines
 from fidelis.terrain.mesh import mitsuba_shape
 
 mesh_dir, tile_dir, out = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
@@ -46,7 +47,7 @@ print(
 print(f"extent: x {v[:, 0].min():.1f}..{v[:, 0].max():.1f} m, y {v[:, 1].min():.1f}..{v[:, 1].max():.1f} m (ground)")
 
 # Registration: top-down orthographic render under a uniform sky, 9 km of ground at 4 m/px,
-# inside the 10 km tile's 9.49 km of ground east-west.
+# inside the mesh's 9.50 km of ground east-west.
 PX_M = 4.0
 HALF_M = 4500.0
 n = round(2 * HALF_M / PX_M)
@@ -70,6 +71,7 @@ scene = mi.load_dict(
     }
 )
 img = np.array(mi.render(scene))[..., 0]
+require_no_blank_lines(img)  # a silent out-of-memory render would fail here, not as a low correlation
 
 
 def ortho_on_grid(east_scale: float) -> np.ndarray:

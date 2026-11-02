@@ -25,6 +25,14 @@ mosaic_footprint:
 # Spherical Mars radius of the mosaics' projection (USGS pages: "Radius A/C 3396190").
 mars_radius_m: 3396190
 
+# Perseverance's Lander Vision System imaged between these heights above the ground.
+# NASA/JPL, Mars 2020 Perseverance Landing Press Kit (February 2021), pp. 21-22: LVS
+# "operates when the spacecraft is between about ... 4.2 to 2.2 kilometers, above the
+# ground". A pre-landing plan, not a flight reconstruction.
+lvs_altitude_m:
+  top: 4200
+  bottom: 2200
+
 tile:
   # Perseverance's touchdown point, Octavia E. Butler Landing. Third-party sources give
   # 18.4447 N, 77.4508 E; not yet checked against a JPL primary source, but it lies in
@@ -32,9 +40,8 @@ tile:
   center_lon: 77.4508
   center_lat: 18.4447
   # Map metres, grown outward to a 12 m grid (whole mesh, texture and map pixels), so
-  # the cut is slightly over 10 km. LVS imaged from 4.2 km down to 2.2 km above the
-  # ground (NASA/JPL Mars 2020 landing press kit, pp. 21-22), so a nadir 90 deg LCAM
-  # view covers 4.4-8.4 km. Valid DTM and orthoimage reach a 10.14 km square around
+  # the cut is slightly over 10 km. Over lvs_altitude_m a nadir 90 deg LCAM view
+  # covers 4.4-8.4 km. Valid DTM and orthoimage reach a 10.14 km square around
   # the landing site. See docs/research/descent-altitude-and-tile-size.md.
   size_m: 10000
   # Both area-averaged from the 1 m DTM and 0.25 m orthoimage. LCAM pixels cover

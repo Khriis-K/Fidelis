@@ -12,7 +12,7 @@ from fidelis.render.mesh_render import (
     RENDER_DETERMINISM_TOLERANCE,
     Sun,
     render,
-    require_no_blank_rows,
+    require_no_blank_lines,
     terrain_scene,
 )
 from fidelis.terrain.mesh import build_terrain_mesh
@@ -197,11 +197,19 @@ def test_non_square_pixels_are_rejected(plateau_mesh):
 
 def test_a_render_of_the_terrain_has_no_blank_rows(plateau_mesh):
     # 30 m across: NADIR_K frames the whole 40 m tile, past the mesh's 39 m, and the
-    # empty edge rows would (rightly) fail the check.
+    # empty edge rows and columns would (rightly) fail the check.
     inside = Intrinsics.from_fov(width=120, height=120, fov_x_deg=math.degrees(2 * math.atan(15 / 100)))
     scene = terrain_scene(plateau_mesh, Sun(270.0, 45.0))
 
-    require_no_blank_rows(render(scene, NADIR, inside, spp=4))
+    require_no_blank_lines(render(scene, NADIR, inside, spp=4))
+
+
+def test_a_view_that_sees_past_the_mesh_edge_fails_the_validity_check(plateau_mesh):
+    # NADIR_K frames 0.5 m beyond the mesh on every side; with no sky light that's black.
+    scene = terrain_scene(plateau_mesh, Sun(270.0, 45.0))
+
+    with pytest.raises(ValueError, match="blank"):
+        require_no_blank_lines(render(scene, NADIR, NADIR_K, spp=4))
 
 
 @pytest.mark.parametrize("row", [0, 57, -1])
@@ -212,13 +220,26 @@ def test_an_image_with_a_blank_row_fails_the_validity_check(row):
     image[row] = 0.0
 
     with pytest.raises(ValueError, match="blank"):
-        require_no_blank_rows(image)
+        require_no_blank_lines(image)
+
+
+@pytest.mark.parametrize("col", [0, 41, -1])
+def test_an_image_with_a_blank_column_fails_the_validity_check(col):
+    # A north-up view tilted or shifted east or west past the mesh goes black in columns;
+    # east-west is the tight side of the 10 km tile at LVS's top altitude.
+    image = np.full((80, 96), 0.2, dtype=np.float32)
+    image[:, col] = 0.0
+
+    with pytest.raises(ValueError, match="blank"):
+        require_no_blank_lines(image)
 
 
 def test_one_lit_pixel_keeps_a_row_from_counting_as_blank():
-    # Deep shadow is dark but not exactly zero across a whole row.
+    # Deep shadow is dark but not exactly zero across a whole line.
     image = np.full((80, 96), 0.2, dtype=np.float32)
     image[10] = 0.0
+    image[:, 20] = 0.0
     image[10, 95] = 1e-4
+    image[79, 20] = 1e-4
 
-    require_no_blank_rows(image)
+    require_no_blank_lines(image)

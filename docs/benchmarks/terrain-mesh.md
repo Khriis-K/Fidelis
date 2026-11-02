@@ -8,6 +8,7 @@ The Jezero ground-truth mesh (`snakemake jezero_mesh`, code in `src/fidelis/terr
 
 - **The tile:** 10,020 × 10,020 map metres centred on the landing site (`size_m` 10,000, grown outward to a 12 m grid so its edges are whole mesh, texture and matching-map pixels). `fidelis-tile` area-averages the 1 m DTM in 4 × 4 blocks and the 0.25 m orthoimage in 8 × 8 blocks, reading the window in strips. Neither tile has any nodata pixels.
 - One vertex per (4 m) DTM pixel, at the pixel centre: 2505 × 2505 = 6,275,025 vertices and 12,540,032 triangles. The binary PLY is 289 MB, and `texture.png` (the 5010 × 5010 orthoimage at 2 m) is 17 MB. Building the tile, mesh and matching map took 41 s on the laptop.
+- The CTX-like matching map grew with the tile: 1670 × 1670 pixels at 6 m (3 × 3 blocks of the 2 m texture), 10,020 map metres square. Its pixels are square in map metres, so on the ground they're 5.69 m east–west and 6.0 m north–south; `map.json` records both, with the east–west scale.
 - Local coordinates: **ground metres** east and north of the tile centre (recorded as `origin` in `mesh.json`), with z the DTM elevation (−2652.1 to −2393.2 m). Raw map metres (~4.59e6) would leave float32 vertices only 0.5 m apart.
 - The mesh stops half a pixel (2 m) inside the tile on each side, because its outer vertices are pixel centres. So it spans ±4750.7 m east–west and ±5008.0 m north–south.
 
@@ -19,7 +20,8 @@ The USGS mosaics are equirectangular with the standard parallel at the equator (
 
 - `fidelis-tile` records `east_west_ground_scale` = cos(latitude at the tile centre) in `tile.json`: **0.94863**. GDAL's inverse projection at the landing site gives 1000 map metres east–west = 948.6 ground metres (`docs/research/descent-altitude-and-tile-size.md`).
 - `fidelis-mesh` multiplies local x by it and records it as `east_scale` in `mesh.json`. Map metres → mesh: x = (map x − origin x) × `east_scale`, y = map y − origin y.
-- One factor for the whole tile: across 10 km, cos(latitude) varies by less than 0.05%.
+- One factor for the whole tile: cos(latitude) differs from its centre value by at most 0.049% at the north and south edges (about 0.1% edge to edge), which puts east–west positions there off by up to 2.3 m at the east and west edges.
+- **Curvature isn't modelled either.** The tile is flat, while Mars falls away from it by d² / 2R: 3.7 m at 5 km from the centre (R = 3,396,190 m), below a 4.3–8.2 m descent-camera pixel at LVS altitudes.
 - Unit test: neighbouring DTM pixels, 1 map metre apart both ways, come out `east_scale` metres apart east–west and 1 m apart north–south. The elevation and texture-registration unit tests run on a scaled mesh, converting back to map metres through the recorded scale.
 
 ## Elevation (acceptance: within a stated tolerance)

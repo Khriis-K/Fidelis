@@ -9,7 +9,10 @@ through the same function, so test and training maps get identical treatment.
 Averaging whole blocks is a simple stand-in for CTX's optics: it removes detail finer
 than a CTX pixel but doesn't model CTX's point-spread function or noise.
 
-    uv run fidelis-matching-map CONFIG ORTHO_TILE OUT_TIF
+Map pixels are square in the mosaics' map metres, so on the ground they're
+cos(latitude) narrower east-west; map.json records both ground sizes.
+
+    uv run fidelis-matching-map CONFIG TILE_DIR OUT_TIF
 """
 
 import argparse
@@ -96,17 +99,22 @@ def build_matching_map(ortho_path: Path, target_res_m: float, dst_path: Path) ->
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("config", type=Path)
-    parser.add_argument("ortho_tile", type=Path)
+    parser.add_argument("tile_dir", type=Path, help="holds ortho.tif and tile.json from fidelis-tile")
     parser.add_argument("out", type=Path)
     args = parser.parse_args()
 
     resolutions = yaml.safe_load(args.config.read_text())["matching_map"]
     lvs_m = resolutions["lvs_map_resolution"]["value_m"]
     require_same_resolution(lvs_m, resolutions["ctx_ground_resolution"]["value_m"])
-    info = build_matching_map(args.ortho_tile, lvs_m, args.out)
+    info = build_matching_map(args.tile_dir / "ortho.tif", lvs_m, args.out)
     # The factor's provenance travels with the map.
     info["lvs_map_resolution"] = resolutions["lvs_map_resolution"]
     info["ctx_ground_resolution"] = resolutions["ctx_ground_resolution"]
+    # Pixels are square in map metres, not on the ground: the projection stretches
+    # east-west by 1/cos(latitude), so a matcher working in ground metres needs this.
+    scale = json.loads((args.tile_dir / "tile.json").read_text())["east_west_ground_scale"]
+    info["east_west_ground_scale"] = scale
+    info["ground_resolution_m"] = {"east_west": info["resolution_m"] * scale, "north_south": info["resolution_m"]}
     record = args.out.with_suffix(".json")
     tmp = record.with_name(record.name + ".tmp")
     tmp.write_text(json.dumps(info, indent=2) + "\n")

@@ -106,15 +106,20 @@ def render(scene, pose: CameraPose, intrinsics: Intrinsics, spp: int, seed: int 
     return np.array(image, dtype=np.float32)[..., 0]
 
 
-def require_no_blank_rows(image: np.ndarray) -> None:
-    """Raise if any image row is exactly zero.
+def require_no_blank_lines(image: np.ndarray) -> None:
+    """Raise if any image row or column is exactly zero.
 
     A 10 km mesh at 2 m spacing filled the laptop's 8 GB GPU, and Mitsuba returned
     streaked, partly black images without raising (likely out of GPU memory). Terrain
-    lit by a sun above the horizon doesn't render a whole row of exact zeros. Empty space past the mesh's
-    edge does (there's no sky light), so this also fails a view whose whole rows miss the
-    mesh, but not one that misses it only in some columns or a corner.
+    lit by a sun above the horizon doesn't render a whole line of exact zeros. Empty
+    space past the mesh's edge does (there's no sky light), so this also fails a view
+    that runs off the mesh along a whole edge of the image, but not one that only clips
+    a corner. Not checked: whether that out-of-memory render's damage was exact zeros
+    along whole lines; it was described as streaks and a black wedge.
     """
-    blank = np.flatnonzero(~np.any(image != 0, axis=1))
-    if blank.size:
-        raise ValueError(f"render has {blank.size} blank rows (first {blank[0]}): out of GPU memory, or off the mesh?")
+    for axis, name in ((1, "rows"), (0, "columns")):
+        blank = np.flatnonzero(~np.any(image != 0, axis=axis))
+        if blank.size:
+            raise ValueError(
+                f"render has {blank.size} blank {name} (first {blank[0]}): out of GPU memory, or off the mesh?"
+            )

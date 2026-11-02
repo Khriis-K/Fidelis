@@ -118,6 +118,7 @@ rule jezero_mesh:
 rule jezero_matching_map:
     input:
         f"{JEZERO}/tile/ortho.tif",
+        f"{JEZERO}/tile/tile.json",
         "config/jezero.yaml",
     output:
         f"{JEZERO}/matching_map/map.tif",
@@ -125,4 +126,4 @@ rule jezero_matching_map:
     resources:
         mem_mb=4000,
     shell:
-        "fidelis-matching-map config/jezero.yaml {input[0]} {output[0]}"
+        f"fidelis-matching-map config/jezero.yaml {JEZERO}/tile {{output[0]}}"

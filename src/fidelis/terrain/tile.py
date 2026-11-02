@@ -151,7 +151,7 @@ def main() -> int:
         "center_lat": tile["center_lat"],
         "bounds": list(bounds),
         "crs": crs,
-        # At the tile's centre; across a 10 km tile cos(latitude) varies by under 0.05%.
+        # At the tile's centre; on a 10 km tile cos(latitude) is within 0.05% of it at the edges.
         "east_west_ground_scale": east_west_ground_scale((bounds[1] + bounds[3]) / 2, radius),
         "dtm": dtm,
         "ortho": cut_tile(args.ortho, bounds, args.out_dir / "ortho.tif", resolution_m=texture_m),
