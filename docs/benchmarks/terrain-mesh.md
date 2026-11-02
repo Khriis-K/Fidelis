@@ -28,7 +28,9 @@ The Jezero ground-truth mesh (`snakemake jezero_mesh`, code in `src/fidelis/terr
 
 ## Opens in a standard viewer
 
-three.js r160's stock `PLYLoader` (in a browser, served from localhost) loaded all 4,016,016 vertices with their UVs. With `texture.png` applied, crater rims and dune fields in the texture sit on the matching relief. The PLY also names its texture in a `comment TextureFile texture.png` line, which is how MeshLab finds a PLY's texture. Neither MeshLab nor Blender is installed on the laptop, so that path is untested.
+- **MeshLab** opened the PLY on the laptop: 4,016,016 vertices and 8,024,018 faces, loaded in 6.7 s. The first build named its UVs `u`/`v`, and MeshLab silently dropped them, so it showed the mesh untextured. The PLY now uses `texture_u`/`texture_v`, the names MeshLab itself writes, plus a `comment TextureFile texture.png` line that tells it which image to load. A test pins those names. *Rechecking the texture in MeshLab after the rename: pending.*
+- **three.js** r160's stock `PLYLoader` (in a browser, served from localhost) loaded all 4,016,016 vertices with their UVs, both before and after the rename. With `texture.png` applied, crater rims and dune fields in the texture sit on the matching relief.
+- Mitsuba 3.9 reads `texture_u`/`texture_v` too, and the registration tests run through it.
 
 ## UV convention: a gotcha for the renderer
 

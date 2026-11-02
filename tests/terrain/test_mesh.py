@@ -142,6 +142,16 @@ def test_the_ply_names_its_texture_for_viewers(tile, tmp_path):
     assert (tmp_path / "mesh" / "texture.png").exists()
 
 
+def test_the_ply_uses_the_uv_names_meshlab_reads(tile, tmp_path):
+    # MeshLab ignores bare u/v and shows the mesh untextured; texture_u/texture_v is
+    # what it writes itself, and Mitsuba and three.js read it too.
+    dtm, ortho, _ = tile
+    build_terrain_mesh(dtm, ortho, tmp_path / "mesh")
+
+    header = (tmp_path / "mesh" / "mesh.ply").read_bytes().split(b"end_header")[0]
+    assert b"property float texture_u\nproperty float texture_v\n" in header
+
+
 def test_the_record_is_written_beside_the_mesh(tile, tmp_path):
     dtm, ortho, _ = tile
     record = build_terrain_mesh(dtm, ortho, tmp_path / "mesh")

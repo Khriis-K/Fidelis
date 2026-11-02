@@ -63,7 +63,8 @@ def write_ply(path: Path, positions: np.ndarray, uvs: np.ndarray, faces: np.ndar
         "ply\nformat binary_little_endian 1.0\n"
         f"comment TextureFile {texture_name}\n"  # MeshLab's convention for a PLY's texture
         f"element vertex {len(vertex)}\n"
-        "property float x\nproperty float y\nproperty float z\nproperty float u\nproperty float v\n"
+        # texture_u/v, not bare u/v: MeshLab drops bare u/v; Mitsuba and three.js read both.
+        "property float x\nproperty float y\nproperty float z\nproperty float texture_u\nproperty float texture_v\n"
         f"element face {len(face)}\nproperty list uchar int vertex_indices\nend_header\n"
     )
     tmp = path.with_name(path.stem + ".tmp" + path.suffix)
