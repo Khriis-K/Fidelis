@@ -6,9 +6,9 @@ import numpy as np
 import pytest
 from rasterio.transform import from_origin
 
-from fidelis.nav.navigator import Navigator
+from fidelis.nav.navigator import Navigator, nadir_homography
 from fidelis.nav.orbital_map import OrbitalMap, load_orbital_map
-from fidelis.render.camera import Intrinsics, look_at
+from fidelis.render.camera import CameraPose, Intrinsics, look_at
 
 REPO = Path(__file__).resolve().parents[2]
 LEFT, TOP = 4589000.0, 1094000.0
@@ -51,11 +51,20 @@ ALTITUDE = 192.0  # 1.5 m descent pixels: finer than the map, as in flight
 TRUE_POSITION = np.array([40.0, -25.0, GROUND_Z + ALTITUDE])
 
 
-def nadir_view(orbital_map):
-    """What a north-up nadir pinhole camera at TRUE_POSITION sees of the flat map, built analytically."""
+def attitude(heading_deg):
+    """A nadir camera's camera-to-world rotation, its image top towards `heading_deg` (0 north, 90 east)."""
+    h = np.radians(heading_deg)
+    return look_at(TRUE_POSITION, TRUE_POSITION - [0, 0, 1], [np.sin(h), np.cos(h), 0]).rotation
+
+
+def nadir_view(orbital_map, heading_deg=0.0):
+    """What a nadir pinhole camera at TRUE_POSITION, its top towards `heading_deg`, sees of the flat map."""
     u, v = np.meshgrid(np.arange(K.width, dtype=np.float64), np.arange(K.height, dtype=np.float64))
-    east = TRUE_POSITION[0] + (u - K.cx) * ALTITUDE / K.fx
-    north = TRUE_POSITION[1] - (v - K.cy) * ALTITUDE / K.fy
+    right = (u - K.cx) * ALTITUDE / K.fx  # ground metres along the image's right and down directions
+    down = (v - K.cy) * ALTITUDE / K.fy
+    h = np.radians(heading_deg)
+    east = TRUE_POSITION[0] + right * np.cos(h) - down * np.sin(h)
+    north = TRUE_POSITION[1] - right * np.sin(h) - down * np.cos(h)
     col = ((east / EAST_SCALE + ORIGIN[0]) - LEFT) / MAP_RES - 0.5
     row = (TOP - (north + ORIGIN[1])) / MAP_RES - 0.5
     return cv2.remap(orbital_map.image, col.astype(np.float32), row.astype(np.float32), cv2.INTER_CUBIC)
@@ -83,6 +92,69 @@ def test_the_result_reports_matches_inliers_and_the_matched_pixel_pairs(navigato
     world = flat_map.pixel_to_world(result.map_points[result.inliers])
     projected, _ = cv2.projectPoints(world, cv2.Rodrigues(w2c[:3, :3])[0], w2c[:3, 3], K.matrix(), None)
     assert np.median(np.linalg.norm(projected.reshape(-1, 2) - result.image_points[result.inliers], axis=1)) < 1.0
+
+
+def test_the_nadir_homography_maps_a_tilted_turned_cameras_pixels_onto_a_nadir_north_up_cameras():
+    # Same centre, same intrinsics; only the rotation differs, so a homography is exact.
+    eye = np.array([10.0, 20.0, 300.0])
+    tilted = look_at(eye, eye + [40, -25, -300], [np.sin(2.0), np.cos(2.0), 0])  # about 9 deg off nadir, turned 115 deg
+    nadir = look_at(eye, eye - [0, 0, 1], [0, 1, 0])
+    ground = np.array([[x, y, 0.0] for x in (-60, 0, 90) for y in (-80, 30, 70)])
+
+    def project(pose):
+        w2c = pose.world_to_camera()
+        pixels, _ = cv2.projectPoints(ground, cv2.Rodrigues(w2c[:3, :3])[0], w2c[:3, 3], K.matrix(), None)
+        return pixels.reshape(-1, 2)
+
+    h = nadir_homography(tilted.rotation, K)
+    mapped = cv2.perspectiveTransform(project(tilted).reshape(-1, 1, 2), h).reshape(-1, 2)
+    np.testing.assert_allclose(mapped, project(nadir), atol=1e-6)
+
+
+def test_an_attitude_whose_view_reaches_the_horizon_is_a_caller_error(navigator, flat_map):
+    # A nadir view of that camera's corners would lie behind it: there's no image to warp to.
+    eye = TRUE_POSITION
+    sideways = look_at(eye, eye + [1, 0, -0.3], [0, 0, 1]).rotation  # about 17 deg below the horizon
+    with pytest.raises(ValueError, match="horizon"):
+        navigator.locate(np.clip(nadir_view(flat_map), 0, 1), K, sideways)
+
+
+@pytest.mark.parametrize("heading", [90.0, 180.0])
+def test_a_turned_view_located_with_its_attitude_is_as_accurate_as_north_up(navigator, flat_map, heading):
+    result = navigator.locate(np.clip(nadir_view(flat_map, heading), 0, 1), K, attitude(heading))
+    assert result.status == "ok"
+    assert np.linalg.norm(result.position - TRUE_POSITION) < 0.25 * MAP_RES * EAST_SCALE
+
+
+@pytest.mark.parametrize("heading", [15.0, 45.0])
+def test_an_off_axis_turn_located_with_its_attitude_lands_within_half_a_map_pixel(navigator, flat_map, heading):
+    # Turns off the pixel grid resample the image, which costs accuracy: here 0.795 m at 15
+    # deg and 0.496 m at 45, against 0.174 m north-up (scripts/check_attitude_warp.py,
+    # docs/benchmarks/navigator.md). Half a map pixel, 0.95 m and the GPU test's tolerance,
+    # still catches a warp that's wrong, not just blurred.
+    result = navigator.locate(np.clip(nadir_view(flat_map, heading), 0, 1), K, attitude(heading))
+    assert result.status == "ok"
+    assert np.linalg.norm(result.position - TRUE_POSITION) < 0.5 * MAP_RES * EAST_SCALE
+
+
+@pytest.mark.parametrize("prior", [None, 0.0])
+def test_a_turned_view_without_its_true_attitude_does_not_locate(navigator, flat_map, prior):
+    # The warp is what makes turned views work: no prior, or a north-up one, leaves it lost.
+    view = np.clip(nadir_view(flat_map, 180.0), 0, 1)
+    result = navigator.locate(view, K, None if prior is None else attitude(prior))
+    assert result.status != "ok" or np.linalg.norm(result.position - TRUE_POSITION) > 0.25 * MAP_RES * EAST_SCALE
+
+
+def test_a_turned_views_matched_pixels_are_in_the_cameras_own_frame(navigator, flat_map):
+    # Checked against the true camera, not the fix: pixels mapped back the wrong way round
+    # (turned 180 deg) would still agree with a fix that turned the camera 180 deg to suit them.
+    result = navigator.locate(np.clip(nadir_view(flat_map, 90.0), 0, 1), K, attitude(90.0))
+    w2c = CameraPose(attitude(90.0), TRUE_POSITION).world_to_camera()
+    world = flat_map.pixel_to_world(result.map_points[result.inliers])
+    projected, _ = cv2.projectPoints(world, cv2.Rodrigues(w2c[:3, :3])[0], w2c[:3, 3], K.matrix(), None)
+    assert np.median(np.linalg.norm(projected.reshape(-1, 2) - result.image_points[result.inliers], axis=1)) < 1.0
+    # And the fix itself faces the way the camera does.
+    assert np.allclose(result.pose.rotation, attitude(90.0), atol=0.01)
 
 
 def test_a_featureless_image_gives_a_failure_record_not_an_exception(navigator):

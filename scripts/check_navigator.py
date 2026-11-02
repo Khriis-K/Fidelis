@@ -10,7 +10,8 @@ The sweep's maps cover the same 6 km square around the tile centre at every
 resolution, because the whole tile at 2 m (5010 px, about 100,000 keypoints) doesn't
 fit LightGlue on an 8 GB GPU. Then the full-tile 6 m map from the workflow, as the
 navigator uses it, under the zenith sun, under the landing-day sun, and at headings of
-45, 90 and 180 degrees, which perfect conditions leave out.
+15, 45, 90 and 180 degrees, which perfect conditions leave out: each matched as it is,
+then warped to north-up by its true attitude (issue #34).
 
     uv run python scripts/check_navigator.py data/jezero
 """
@@ -45,14 +46,19 @@ ZENITH = Sun(0.0, 90.0)
 LANDING = Sun(257.0, 40.0)  # the landing-day sun suggested for the splat scenes (config/jezero.yaml)
 
 
+def camera(truth, heading):
+    """Nadir, its image top towards `heading` degrees (0 north, 90 east)."""
+    h = np.radians(heading)
+    return look_at(truth, truth - [0, 0, 1], [np.sin(h), np.cos(h), 0])
+
+
 def renders(sun, views):
     """{name: (truth, image)}; views maps a name to (altitude, heading in degrees)."""
     scene = terrain_scene(data / "mesh", sun)
     out = {}
     for name, (altitude, heading) in views.items():
         truth = np.array([*OFFSET, ground + altitude])
-        h = np.radians(heading)
-        image = render(scene, look_at(truth, truth - [0, 0, 1], [np.sin(h), np.cos(h), 0]), k, spp=1024)
+        image = render(scene, camera(truth, heading), k, spp=1024)
         require_no_blank_lines(image)
         # The 99.9th percentile to full scale; the zenith sun's albedo image already sits in [0, 1].
         out[name] = truth, np.clip(image / max(1.0, np.percentile(image, 99.9)), 0, 1)
@@ -76,9 +82,9 @@ def window_map(factor, half_px=1500):
     )
 
 
-def report(label, navigator, truth, image):
+def report(label, navigator, truth, image, attitude=None):
     t0 = time.perf_counter()
-    result = navigator.locate(image, k)
+    result = navigator.locate(image, k, attitude)
     took = time.perf_counter() - t0
     err = "-" if result.position is None else f"{np.linalg.norm(result.position - truth):.2f}"
     print(
@@ -93,7 +99,8 @@ header = (
     "|---|---|---|---|---|---|---|"
 )
 band = {"4.2 km": (4200.0, 0.0), "2.2 km": (2200.0, 0.0)}
-zenith = renders(ZENITH, band | {f"2.2 km, heading {h}": (2200.0, float(h)) for h in (45, 90, 180)})
+HEADINGS = (15, 45, 90, 180)
+zenith = renders(ZENITH, band | {f"2.2 km, heading {h}": (2200.0, float(h)) for h in HEADINGS})
 landing = renders(LANDING, {"2.2 km": (2200.0, 0.0)})
 
 print(f"{torch.cuda.get_device_name()}; mean ground {ground:.1f} m; truth offset {OFFSET.tolist()} m")
@@ -108,6 +115,9 @@ navigator = Navigator(full)
 for alt in band:
     report(f"{alt}, zenith sun", navigator, *zenith[alt])
 report("2.2 km, landing-day sun (257, 40)", navigator, *landing["2.2 km"])
-for h in (45, 90, 180):
+for h in HEADINGS:
     report(f"2.2 km, zenith sun, heading {h}", navigator, *zenith[f"2.2 km, heading {h}"])
+for h in HEADINGS:
+    truth, image = zenith[f"2.2 km, heading {h}"]
+    report(f"2.2 km, zenith sun, heading {h}, warped by attitude", navigator, truth, image, camera(truth, h).rotation)
 print(f"\npeak torch GPU memory {torch.cuda.max_memory_allocated() / 2**30:.1f} GB")
