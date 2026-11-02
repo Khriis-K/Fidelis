@@ -46,8 +46,10 @@ def block_mean(array: np.ndarray, factor: int, nodata: float | None = None) -> n
     rows, cols = array.shape
     if rows % factor or cols % factor:
         raise ValueError(f"shape {array.shape} doesn't divide into {factor} x {factor} blocks")
-    blocks = array.reshape(rows // factor, factor, cols // factor, factor).astype(np.float64)
-    valid = np.ones_like(blocks, dtype=bool) if nodata is None else blocks != nodata
+    blocks = array.reshape(rows // factor, factor, cols // factor, factor)
+    # Compare in the image's own dtype: a float32 nodata like -3.4e38 isn't equal to itself in float64.
+    valid = np.ones(blocks.shape, dtype=bool) if nodata is None else blocks != nodata
+    blocks = blocks.astype(np.float64)
     count = valid.sum(axis=(1, 3))
     total = np.where(valid, blocks, 0).sum(axis=(1, 3))
     with np.errstate(invalid="ignore", divide="ignore"):

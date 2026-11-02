@@ -13,6 +13,7 @@ MARS_EQC = "+proj=eqc +lat_ts=0 +lon_0=0 +R=3396190 +units=m +no_defs"
 LEFT, TOP = 4589870.0, 1094306.0
 DTM_SHAPE = (8, 10)  # rows, cols; not square, so a transposed grid can't pass
 ORTHO_SCALE = 4  # 0.25 m ortho pixels per 1 m DTM pixel, as in the Jezero tile
+EAST_SCALE = 0.9486  # ground metres per map metre east-west at the Jezero landing site
 
 
 def write_raster(path, data, res, nodata=None):
@@ -47,7 +48,7 @@ def tile(tmp_path):
 @pytest.fixture
 def built(tile, tmp_path):
     dtm, ortho, heights = tile
-    record = build_terrain_mesh(dtm, ortho, tmp_path / "mesh")
+    record = build_terrain_mesh(dtm, ortho, tmp_path / "mesh", east_scale=EAST_SCALE)
     mi.set_variant("scalar_rgb")
     scene = mi.load_dict({"type": "scene", "terrain": mitsuba_shape(tmp_path / "mesh")})
     (shape,) = scene.shapes()
@@ -55,10 +56,23 @@ def built(tile, tmp_path):
 
 
 def map_xy(shape, record):
-    """Vertex positions in map metres, from the mesh's local frame and its recorded origin."""
+    """Vertex positions in map metres, from the mesh's ground-metre frame and its recorded origin and scale."""
     local = np.array(shape.vertex_positions_buffer()).reshape(-1, 3)
     ox, oy = record["origin"]
-    return local[:, 0] + ox, local[:, 1] + oy, local[:, 2]
+    return local[:, 0] / record["east_scale"] + ox, local[:, 1] + oy, local[:, 2]
+
+
+def test_east_west_map_distances_shrink_to_ground_metres_and_north_south_ones_dont(built):
+    # Neighbouring DTM pixels are 1 map metre apart both ways; on the ground, east-west
+    # that's EAST_SCALE (cos latitude) metres, north-south a full metre.
+    record, shape, _ = built
+    local = np.array(shape.vertex_positions_buffer()).reshape(*DTM_SHAPE, 3)
+
+    np.testing.assert_allclose(np.diff(local[:, :, 0], axis=1), EAST_SCALE, atol=1e-5)
+    np.testing.assert_allclose(np.diff(local[:, :, 1], axis=0), -1.0, atol=1e-5)  # rows run north to south
+    across = local[0, -1, 0] - local[0, 0, 0]
+    assert across == pytest.approx(EAST_SCALE * (DTM_SHAPE[1] - 1), abs=1e-5)
+    assert record["east_scale"] == EAST_SCALE
 
 
 def test_the_mesh_has_one_vertex_per_dtm_pixel_and_two_triangles_per_quad(built):
@@ -135,7 +149,7 @@ def test_uvs_follow_the_standard_convention_with_v_up(built):
 
 def test_the_ply_names_its_texture_for_viewers(tile, tmp_path):
     dtm, ortho, _ = tile
-    build_terrain_mesh(dtm, ortho, tmp_path / "mesh")
+    build_terrain_mesh(dtm, ortho, tmp_path / "mesh", east_scale=EAST_SCALE)
 
     header = (tmp_path / "mesh" / "mesh.ply").read_bytes().split(b"end_header")[0]
     assert b"comment TextureFile texture.png" in header
@@ -146,7 +160,7 @@ def test_the_ply_uses_the_uv_names_meshlab_reads(tile, tmp_path):
     # MeshLab ignores bare u/v and shows the mesh untextured; texture_u/texture_v is
     # what it writes itself, and Mitsuba and three.js read it too.
     dtm, ortho, _ = tile
-    build_terrain_mesh(dtm, ortho, tmp_path / "mesh")
+    build_terrain_mesh(dtm, ortho, tmp_path / "mesh", east_scale=EAST_SCALE)
 
     header = (tmp_path / "mesh" / "mesh.ply").read_bytes().split(b"end_header")[0]
     assert b"property float texture_u\nproperty float texture_v\n" in header
@@ -154,7 +168,7 @@ def test_the_ply_uses_the_uv_names_meshlab_reads(tile, tmp_path):
 
 def test_the_record_is_written_beside_the_mesh(tile, tmp_path):
     dtm, ortho, _ = tile
-    record = build_terrain_mesh(dtm, ortho, tmp_path / "mesh")
+    record = build_terrain_mesh(dtm, ortho, tmp_path / "mesh", east_scale=EAST_SCALE)
 
     assert json.loads((tmp_path / "mesh" / "mesh.json").read_text()) == record
     assert record["crs"]
@@ -168,7 +182,7 @@ def test_a_dtm_with_nodata_is_rejected(tile, tmp_path):
     write_raster(dtm, heights, 1.0, nodata=-3.4e38)
 
     with pytest.raises(ValueError, match="nodata"):
-        build_terrain_mesh(dtm, ortho, tmp_path / "mesh")
+        build_terrain_mesh(dtm, ortho, tmp_path / "mesh", east_scale=EAST_SCALE)
 
 
 def test_an_orthoimage_with_other_bounds_is_rejected(tile, tmp_path):
@@ -178,4 +192,4 @@ def test_an_orthoimage_with_other_bounds_is_rejected(tile, tmp_path):
     write_raster(tmp_path / "small.tif", small, 1.0 / ORTHO_SCALE)
 
     with pytest.raises(ValueError, match="bounds"):
-        build_terrain_mesh(dtm, tmp_path / "small.tif", tmp_path / "mesh")
+        build_terrain_mesh(dtm, tmp_path / "small.tif", tmp_path / "mesh", east_scale=EAST_SCALE)

@@ -2,6 +2,8 @@
 
 **Question:** at what altitudes did Perseverance's Lander Vision System (LVS) image the ground, and does Fidelis need, and can it get, a bigger Jezero tile than the current 2 km? Investigated 2026-11-01, after issue #5 found that a 90° camera sees past the 2 km tile above about 1 km.
 
+**Status:** built in issue #32 (10 km tile, 4 m mesh, 2 m texture, east–west scale corrected). Measured results are in `docs/benchmarks/terrain-mesh.md` and `docs/benchmarks/mesh-render.md`; this note keeps the investigation as it was.
+
 ## Answer
 
 - **LVS worked from 4.2 km down to 2.2 km above the ground**, so the descent camera sees 4.4 to 8.4 km of ground, straight down. The 2 km tile covers none of that band.

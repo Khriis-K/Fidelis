@@ -31,8 +31,18 @@ tile:
   # the post-landing HiRISE image ESP_073912_1985 (centred 18.462 N, 77.392 E).
   center_lon: 77.4508
   center_lat: 18.4447
-  # Grown outward to the 6 m map grid, so the cut is slightly over 2 km.
-  size_m: 2000
+  # Map metres, grown outward to a 12 m grid (whole mesh, texture and map pixels), so
+  # the cut is slightly over 10 km. LVS imaged from 4.2 km down to 2.2 km above the
+  # ground (NASA/JPL Mars 2020 landing press kit, pp. 21-22), so a nadir 90 deg LCAM
+  # view covers 4.4-8.4 km. Valid DTM and orthoimage reach a 10.14 km square around
+  # the landing site. See docs/research/descent-altitude-and-tile-size.md.
+  size_m: 10000
+  # Both area-averaged from the 1 m DTM and 0.25 m orthoimage. LCAM pixels cover
+  # 4.3 m (2.2 km) to 8.2 m (4.2 km) at the image centre, so neither is coarser than
+  # what the camera resolves. At 2 m / 1 m the 10 km mesh filled the laptop's 8 GB
+  # GPU and rendered corrupt images.
+  mesh_resolution_m: 4.0
+  texture_resolution_m: 2.0
 
 matching_map:
   # The map is the orthoimage averaged down to the LVS map's resolution.

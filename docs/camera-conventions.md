@@ -6,10 +6,14 @@ One pose convention for every part of Fidelis that places a camera: the Mitsuba 
 
 The terrain mesh's local frame, in metres (`mesh.json`):
 
-- **x east, y north**, measured from the tile centre (`origin` in `mesh.json`, in map metres of the mosaic's equirectangular projection).
-- **z up**, the DTM elevation itself (around −2570 m at Jezero), not height above ground.
+- **x east, y north, in ground metres**, measured from the tile centre (`origin` in `mesh.json`, in map metres of the mosaic's equirectangular projection).
+- **z up**, the DTM elevation itself (around −2550 m at Jezero), not height above ground.
 
-So a camera 900 m above Jezero's mean ground sits at z ≈ −1672 m. Map metres → local: subtract `origin` from x and y.
+So a camera 2.2 km above the 10 km tile's mean ground (−2553.2 m) sits at z ≈ −353 m.
+
+**Map metres are not ground metres east–west.** The mosaics' projection has its standard parallel at the equator (`lat_ts=0`), so it stretches east–west distances by 1/cos(latitude): 5.4% at Jezero. The mesh corrects for it with one factor, `east_scale` in `mesh.json` (cos latitude at the tile centre, 0.94863). Map metres → local: x = (map x − origin x) × `east_scale`, y = map y − origin y. Local → map: x / `east_scale` + origin x. North–south needs no correction.
+
+**The world frame is flat; Mars isn't.** The tile is a flat projection of a sphere, so true ground falls away from it by d² / 2R: **3.7 m at 5 km from the centre** (R = 3,396,190 m). That's below a descent-camera pixel at LVS altitudes (4.3–8.2 m), and it isn't modelled. A long, low, oblique view would see the horizon in the wrong place.
 
 ## Camera frame and pose
 
@@ -47,4 +51,4 @@ The descent camera mirrors Perseverance's LCAM: **1024 × 1024 pixels, 90° × 9
 
 - **Mitsuba's camera frame is not OpenCV's.** Mitsuba's perspective camera looks along +z with +y up and +x to the left. `mitsuba_sensor()` converts with `diag(−1, −1, 1)`; don't build Mitsuba cameras by hand.
 - **Mitsuba's film puts pixel centres at half-integers**, OpenCV at integers; `mitsuba_sensor()` accounts for it.
-- **The field of view limits altitude on the 2 km tile.** A nadir 90° camera sees 2 × altitude across, so above about 1000 m it sees past the mesh's edge, into empty black. See `docs/benchmarks/mesh-render.md`.
+- **The field of view limits altitude and tilt.** A nadir 90° camera sees 2 × altitude across. The 10 km mesh is 9.50 km of ground east–west, so at LVS's top altitude (4.2 km) a nadir view leaves only about 550 m spare on each side (about 3.5° of tilt); at 2.2 km it leaves about 2.5 km. Past the edge the image is empty black. `require_no_blank_rows()` catches whole blank rows, not blank columns or corners. See `docs/benchmarks/mesh-render.md`.

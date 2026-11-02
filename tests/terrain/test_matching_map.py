@@ -83,6 +83,14 @@ def test_nodata_pixels_are_left_out_of_the_average():
     assert block_mean(image, 2, nodata=0)[0, 0] == 60
 
 
+def test_a_float32_nodata_is_recognised_even_when_float64_cant_hold_it_exactly():
+    # -3.4e38 rounds when stored as float32, so comparing after a float64 cast misses it
+    # and averages a DTM hole into its neighbours.
+    image = np.array([[-3.4e38, 10.0], [10.0, 10.0]], dtype=np.float32)
+
+    assert block_mean(image, 2, nodata=-3.4e38)[0, 0] == 10.0
+
+
 def test_a_block_with_no_valid_pixels_stays_nodata():
     image = np.zeros((2, 4), dtype=np.uint8)
     image[:, 2:] = 90

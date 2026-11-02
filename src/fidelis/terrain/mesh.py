@@ -2,17 +2,19 @@
 
 One vertex per DTM pixel, at the pixel centre and the DTM's height there, so the mesh
 reproduces the DTM exactly at its samples and interpolates linearly between them. The
-mesh is half a pixel (0.5 m) smaller than the tile on each side; the texture still spans
-the whole tile, and each vertex's UV points at the orthoimage under it.
+mesh is half a pixel smaller than the tile on each side; the texture still spans the
+whole tile, and each vertex's UV points at the orthoimage under it.
 
-Coordinates are local metres (x east, y north, z elevation) around the tile centre,
-recorded as `origin` in mesh.json. Raw map metres near 4.6e6 m would leave float32
-vertex positions only 0.5 m apart.
+Coordinates are local ground metres (x east, y north, z elevation) around the tile
+centre, recorded as `origin` in mesh.json. The mosaics' equirectangular projection
+stretches east-west by 1/cos(latitude), so x is map metres times `east_scale`
+(cos latitude at the tile centre, from tile.json); y is map metres as they are. Raw map
+metres near 4.6e6 m would also leave float32 vertex positions only 0.5 m apart.
 
 Output is a binary PLY with per-vertex UVs (v = 0 at the image's bottom row, the
 convention MeshLab, Blender and three.js use) plus texture.png and mesh.json.
 
-    uv run fidelis-mesh DTM ORTHO OUT_DIR
+    uv run fidelis-mesh TILE_DIR OUT_DIR
 """
 
 import argparse
@@ -34,8 +36,10 @@ def _read(path: Path) -> tuple[np.ndarray, rasterio.coords.BoundingBox, rasterio
         return src.read(1), src.bounds, src.transform, src.nodata, src.crs.to_wkt()
 
 
-def grid_mesh(heights: np.ndarray, transform: rasterio.Affine) -> tuple[np.ndarray, np.ndarray, np.ndarray, list]:
-    """Positions (local metres), UVs and triangles for a north-up height grid; also the origin."""
+def grid_mesh(
+    heights: np.ndarray, transform: rasterio.Affine, east_scale: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list]:
+    """Positions (local ground metres), UVs and triangles for a north-up height grid; also the origin."""
     rows, cols = heights.shape
     r, c = np.mgrid[:rows, :cols]
     x = transform.c + (c + 0.5) * transform.a
@@ -44,7 +48,9 @@ def grid_mesh(heights: np.ndarray, transform: rasterio.Affine) -> tuple[np.ndarr
     right, bottom = left + cols * transform.a, top + rows * transform.e
     origin = [(left + right) / 2, (bottom + top) / 2]
 
-    positions = np.stack([x - origin[0], y - origin[1], heights], axis=-1).reshape(-1, 3).astype(np.float32)
+    positions = (
+        np.stack([(x - origin[0]) * east_scale, y - origin[1], heights], axis=-1).reshape(-1, 3).astype(np.float32)
+    )
     uvs = np.stack([(x - left) / (right - left), (y - bottom) / (top - bottom)], axis=-1).reshape(-1, 2)
 
     # Split each grid quad into two triangles, counter-clockwise seen from above (normals up).
@@ -75,8 +81,11 @@ def write_ply(path: Path, positions: np.ndarray, uvs: np.ndarray, faces: np.ndar
     tmp.replace(path)
 
 
-def build_terrain_mesh(dtm_path: Path, ortho_path: Path, out_dir: Path) -> dict:
-    """Write mesh.ply, texture.png and mesh.json into out_dir; return the mesh.json record."""
+def build_terrain_mesh(dtm_path: Path, ortho_path: Path, out_dir: Path, east_scale: float) -> dict:
+    """Write mesh.ply, texture.png and mesh.json into out_dir; return the mesh.json record.
+
+    east_scale is ground metres per map metre east-west (`tile.east_west_ground_scale`).
+    """
     heights, bounds, transform, nodata, crs = _read(dtm_path)
     image, ortho_bounds, _, _, _ = _read(ortho_path)
     if any(abs(a - b) > EPS for a, b in zip(bounds, ortho_bounds, strict=True)):
@@ -87,7 +96,7 @@ def build_terrain_mesh(dtm_path: Path, ortho_path: Path, out_dir: Path) -> dict:
     if holes.any():
         raise ValueError(f"{dtm_path} has {holes.sum()} nodata pixels; the mesh would have holes")
 
-    positions, uvs, faces, origin = grid_mesh(heights, transform)
+    positions, uvs, faces, origin = grid_mesh(heights, transform, east_scale)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     tmp = out_dir / "texture.tmp.png"
@@ -102,7 +111,11 @@ def build_terrain_mesh(dtm_path: Path, ortho_path: Path, out_dir: Path) -> dict:
         "crs": crs,
         "bounds": list(bounds),
         "origin": origin,
-        "frame": "local metres: x east, y north from origin; z elevation as in the DTM",
+        "east_scale": east_scale,
+        "frame": (
+            "local ground metres: x east = (map x - origin x) * east_scale, y north = map y - origin y;"
+            " z elevation as in the DTM"
+        ),
         "uv": "v = 0 at the texture's bottom row (OpenGL convention)",
         "vertex_count": len(positions),
         "face_count": len(faces),
@@ -141,11 +154,13 @@ def mitsuba_shape(mesh_dir: Path) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("dtm", type=Path)
-    parser.add_argument("ortho", type=Path)
+    parser.add_argument("tile_dir", type=Path, help="holds dtm.tif, ortho.tif and tile.json from fidelis-tile")
     parser.add_argument("out_dir", type=Path)
     args = parser.parse_args()
 
-    record = build_terrain_mesh(args.dtm, args.ortho, args.out_dir)
+    tile = json.loads((args.tile_dir / "tile.json").read_text())
+    record = build_terrain_mesh(
+        args.tile_dir / "dtm.tif", args.tile_dir / "ortho.tif", args.out_dir, tile["east_west_ground_scale"]
+    )
     print(f"mesh {record['vertex_count']} vertices, {record['face_count']} triangles in {args.out_dir}")
     return 0

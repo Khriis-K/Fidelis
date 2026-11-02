@@ -1,6 +1,6 @@
 """Camera poses and intrinsics, in the one convention Fidelis uses everywhere.
 
-World frame: the terrain mesh's local metres (x east, y north, z up), as in mesh.json.
+World frame: the terrain mesh's local ground metres (x east, y north, z up), as in mesh.json.
 
 Camera frame: OpenCV's, x right, y down, z forward along the optical axis. A pose is
 the camera-to-world rotation (its columns are the camera's axes in world coordinates)

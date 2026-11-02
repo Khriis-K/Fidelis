@@ -1,10 +1,32 @@
-# Mesh render checks (issue #5)
+# Mesh render checks (issues #5 and #32)
 
-The Mitsuba path-traced renderer (`src/fidelis/render/mesh_render.py`) on the Jezero mesh from issue #4, measured on the laptop (RTX 5070 Laptop GPU, 8 GB; Mitsuba 3.9.1, `cuda_ad_rgb`) on 2026-11-01. Reproduce with:
+The Mitsuba path-traced renderer (`src/fidelis/render/mesh_render.py`) on the Jezero mesh, measured on the laptop (RTX 5070 Laptop GPU, 8 GB; Mitsuba 3.9.1, `cuda_ad_rgb`) on 2026-11-01. Issue #5 measured issue #4's 2 km mesh from 900 m; issue #32 measured the 10 km mesh (4 m mesh, 2 m texture, ground metres; `docs/benchmarks/terrain-mesh.md`) at LVS altitudes, in the next section. Sections after that are issue #5's unless they say otherwise. Reproduce the current numbers with:
 
     uv run python scripts/check_mesh_render.py data/jezero/mesh data/jezero/render
 
 Pose and pixel conventions are in `docs/camera-conventions.md`.
+
+## LVS altitudes on the 10 km mesh (issue #32)
+
+Perseverance's Lander Vision System imaged from **4.2 km down to 2.2 km** above the ground (NASA/JPL Mars 2020 landing press kit, pp. 21–22). Test views: nadir, north up, LCAM intrinsics (1024 × 1024 px, 90°), at 4.2 and 2.2 km above the mesh's mean ground (−2553.2 m), so they see 8.4 and 4.4 km of the mesh's 9.50 km (east–west) by 10.02 km. Five suns as below, 64 spp, five timed renders per view after a first one.
+
+| | 4.2 km | 2.2 km |
+|---|---|---|
+| Render, median over five suns' medians | 0.056–0.057 s (min 0.055, max 0.062) | 0.053–0.054 s (min 0.052, max 0.057) |
+| 1024 spp render | 0.79–0.81 s | 0.76–0.78 s |
+| RMS vs 1024 spp, at 64 spp | 1.1–2.2% of median pixel | 0.9–1.4% |
+| Same-seed max pixel difference | up to 3.0e-7 | up to 2.4e-7 |
+| Pixels below 10% of median (shadow) | 0.0–4.1% | 0.1–4.7% |
+
+- **GPU memory: +2,084 MiB once the scene is loaded, +2,102 MiB after rendering** (nvidia-smi, whole GPU, against 0 MiB in use before; 8,151 MiB total). It doesn't grow between suns: each scene is dropped before the next loads.
+- **Scene load: 1.4–1.9 s** for the 289 MB mesh. The first render in the process took 0.60 s while kernels compiled.
+- **Every render passed the blank-row check** (`require_no_blank_rows`, 90 images: nine per sun and altitude). The research run at 2 m mesh / 1 m texture filled the GPU (+7.7 GB) and returned streaked, partly black images without raising (`docs/research/descent-altitude-and-tile-size.md`). The check makes that failure loud. It also fires when whole rows see past the mesh's edge, since there's no sky light: a unit test's view that framed 0.5 m beyond the mesh failed it on its edge rows.
+- Same-seed differences stay under the 1e-6 tolerance below.
+- Visual check (2026-11-01): `nadir_4.2km_*.png` and `nadir_2.2km_*.png` in `data/jezero/render/` show the delta front and its scarp in the upper left, craters and dune fields, with no streaks or black bands. `shadows_low_sun.png` and `shading.png` are now the central 256 × 256 px of the 2.2 km views (about 1.1 km across).
+
+**Room for tilt and offset.** The mesh's ground half-widths are 4,751 m east–west and 5,008 m north–south. A nadir view at 4.2 km needs 4,200 m, leaving **about 550 m** east–west (about 3.5° of tilt, or 550 m of offset); at 2.2 km it leaves about 2,550 m. A scenario that tilts or shifts further sees off the mesh. The blank-row check only notices when whole image rows go blank (past the north or south edge in a north-up view); blank columns or corners pass it, so the scenario sampler (#6) needs its own off-mesh check.
+
+**Caveats:** one laptop GPU, nadir views only, five suns. CARC GPUs (40–80 GB) would hold a finer mesh, which wasn't tried. GPU memory is the whole GPU's, so another process using the GPU would show up in it.
 
 ## Projection matches OpenCV
 
@@ -23,7 +45,7 @@ The unit test renders three small glowing spheres with an oblique, rolled camera
 
 The target camera is LCAM-like: **1024 × 1024 px, 90° field of view** (Maki et al. 2020; see `docs/camera-conventions.md`). Test views are nadir, north up, 900 m above the tile's mean ground (−2571.8 m). A 90° camera sees 2 × altitude across, so 900 m covers 1.8 km of the 2.0 km mesh.
 
-**Altitude limit.** On this 2 km tile, a nadir 90° camera above about 1000 m sees past the mesh's edge. LVS worked from 4.2 km down to 2.2 km above the ground (NASA/JPL landing press kit), entirely above that limit. A 10 km tile at 4 m mesh spacing fits on the laptop and renders at the same speed. See `docs/research/descent-altitude-and-tile-size.md`. This needs a decision before the seeded scenario sampler (issue #6) fixes its altitude range.
+**Altitude limit.** On the 2 km tile, a nadir 90° camera above about 1000 m saw past the mesh's edge, below LVS's whole 4.2–2.2 km band. Issue #32 replaced it with the 10 km tile; see the section above.
 
 ## Render time (acceptance: time per image at the target resolution)
 

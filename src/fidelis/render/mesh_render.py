@@ -27,8 +27,8 @@ from fidelis.terrain.mesh import mitsuba_shape
 MAX_DEPTH = 3  # camera ray, direct sun, and one bounce off the terrain
 # Same scene, pose, spp and seed on the same variant and machine: the largest pixel
 # difference allowed between two renders. scalar_rgb repeats bit for bit; cuda_ad_rgb's
-# film adds samples atomically in no fixed order, which moved pixels by up to 1.8e-7 on
-# the Jezero mesh (docs/benchmarks/mesh-render.md).
+# film adds samples atomically in no fixed order, which moved pixels by up to 3.0e-7 on
+# the 10 km Jezero mesh (docs/benchmarks/mesh-render.md).
 RENDER_DETERMINISM_TOLERANCE = 1e-6
 # Mitsuba's perspective camera looks along its local +z with +y up and +x to the left;
 # OpenCV's has +y down and +x to the right.
@@ -104,3 +104,17 @@ def render(scene, pose: CameraPose, intrinsics: Intrinsics, spp: int, seed: int 
     integrator = mi.load_dict({"type": "path", "max_depth": MAX_DEPTH})
     image = mi.render(scene, sensor=sensor, integrator=integrator, spp=spp, seed=seed)
     return np.array(image, dtype=np.float32)[..., 0]
+
+
+def require_no_blank_rows(image: np.ndarray) -> None:
+    """Raise if any image row is exactly zero.
+
+    A 10 km mesh at 2 m spacing filled the laptop's 8 GB GPU, and Mitsuba returned
+    streaked, partly black images without raising (likely out of GPU memory). Terrain
+    lit by a sun above the horizon doesn't render a whole row of exact zeros. Empty space past the mesh's
+    edge does (there's no sky light), so this also fails a view whose whole rows miss the
+    mesh, but not one that misses it only in some columns or a corner.
+    """
+    blank = np.flatnonzero(~np.any(image != 0, axis=1))
+    if blank.size:
+        raise ValueError(f"render has {blank.size} blank rows (first {blank[0]}): out of GPU memory, or off the mesh?")

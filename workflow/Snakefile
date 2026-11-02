@@ -98,11 +98,13 @@ rule jezero_tile:
         f"fidelis-tile config/jezero.yaml {JEZERO}/raw/dtm.tif {JEZERO}/raw/ortho.tif {JEZERO}/tile"
 
 
-# The ground-truth scene: one vertex per DTM pixel, textured with the orthoimage.
+# The ground-truth scene: one vertex per DTM pixel, textured with the orthoimage, in
+# ground metres (tile.json carries the east-west scale).
 rule jezero_mesh:
     input:
         f"{JEZERO}/tile/dtm.tif",
         f"{JEZERO}/tile/ortho.tif",
+        f"{JEZERO}/tile/tile.json",
     output:
         f"{JEZERO}/mesh/mesh.ply",
         f"{JEZERO}/mesh/texture.png",
@@ -110,7 +112,7 @@ rule jezero_mesh:
     resources:
         mem_mb=4000,
     shell:
-        f"fidelis-mesh {{input[0]}} {{input[1]}} {JEZERO}/mesh"
+        f"fidelis-mesh {JEZERO}/tile {JEZERO}/mesh"
 
 
 rule jezero_matching_map:
