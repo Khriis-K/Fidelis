@@ -64,7 +64,7 @@ When writing or modifying code, follow these principles:
 
 - **Python project**: managed with uv. Run everything through it (`uv run pytest`, `uv run python ...`), and add dependencies with `uv add`, never `pip install`, so `pyproject.toml` and `uv.lock` stay the source of truth. Package code lives in `src/fidelis/`; tests mirror it under `tests/` (`src/fidelis/nav/pnp.py` → `tests/nav/test_pnp.py`).
 - **Hook scripts**: `scripts/hooks/` is stdlib-only and runs on the global `python`, outside the uv environment, so hooks work before the project is installed.
-- **Shell**: Prefer PowerShell for Windows-native commands. Use Bash for POSIX scripts only.
+- **Shell**: Prefer PowerShell for Windows-native commands. Use Bash for POSIX scripts only. Exception: run Snakemake and `pytest` from Bash, because the SLURM plugin crashes at import without `which` (`docs/environment.md`, "Snakemake crashes on Windows without `which`").
 - **Prefer monitors over polling** — for long-running commands (builds, tests, dev servers), use the Monitor tool instead of polling loops. Monitors stream events as they happen and don't burn context re-checking.
 
 ## Cluster (CARC)

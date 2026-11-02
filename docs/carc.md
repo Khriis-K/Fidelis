@@ -126,7 +126,7 @@ exit                                             # release the debug node
 
 The venv uses a uv-managed Python 3.12 (`python-preference = "only-managed"` in `pyproject.toml`), not the node's `/usr/bin/python3.12`. The first venv was built on the system Python, which gave two problems: its interpreter differed between nodes (3.12.15 on e23-02, 3.12.14 on d11-03, so uv warned about an incompatible environment), and the compute nodes lack its headers, so gsplat's build failed with `Python.h: No such file or directory` (job 13639170). A venv made before that change must be deleted once (`rm -rf .venv`) before `uv sync`; uv installs the interpreter under `~/.local/share/uv/python`.
 
-Re-run `uv sync` after any `git pull` that changes `uv.lock`. A `/scratch1` purge only costs a re-download, because `UV_LINK_MODE=copy` means the venv doesn't point into the cache.
+Re-run `uv sync` after any `git pull` that changes `uv.lock` or `pyproject.toml`. A new command in `[project.scripts]` changes only `pyproject.toml`, and it isn't installed until a sync: `fidelis-scene` (#33) failed with "command not found" in job 13673724 (2026-11-02) for that reason. `uv sync --dry-run` lists what a sync would change; if it's only the `fidelis` package itself, there's nothing to unpack and it's light enough for the login node. A `/scratch1` purge only costs a re-download, because `UV_LINK_MODE=copy` means the venv doesn't point into the cache.
 
 ## Workflow profiles
 
@@ -193,6 +193,30 @@ Not run: `a40` (debug and gpu partitions; would be a third architecture, sm_86).
   Go through `import_gsplat()` so the build flags match the GPU job's; otherwise gsplat wipes the cache when the job loads it. `8.9+PTX` is the L40S (sm_89); torch's own auto-detection on an L40S produces the same `-gencode` flags, so the GPU job reuses this build: job 13649053 printed no build output and finished all five checks in 38 s, against 300 s for the build alone. Don't run it while a GPU job may be building gsplat: the two would race on the same cache directory.
 - **Driver.** The `cu134` torch build needs an R580-or-newer driver. The L40S node c04-02 runs 580.159.04 (`nvidia-smi` in job 13632519's log, 2026-10-31).
 - **Harmless warning: `jitc_llvm_init(): LLVM API initialization failed`.** Mitsuba's JIT (Dr.Jit) tries to load LLVM for its CPU backend at import and finds none on the compute node. Fidelis uses the `cuda_ad_rgb` variant, which doesn't need LLVM, and the Mitsuba check passes with the warning printed (job 13649053). It would matter only for an `llvm_*` variant.
+
+## Plain Monte Carlo on CARC
+
+The wide scene (#33) doesn't fit the laptop: its matching map gives 70,726 keypoints (14,290 on the 10 km tile; measured 2026-11-02), and LightGlue ran out of the RTX 5070's 8 GB matching a descent image against them. The `plain_mc` rule is pinned to `l40s` (48 GB) in `profiles/carc`.
+
+- **Weights first, on the login node.** ALIKED and LightGlue download their weights from GitHub on first use (`torch.hub.load_state_dict_from_url` in `lightglue/aliked.py` and `lightglue/lightglue.py`), and compute nodes have no internet. Building both models once on the login node caches `aliked-n16.pth` and `aliked_lightglue_v0-1_arxiv.pth` in `~/.cache/torch/hub/checkpoints`, where the job finds them. CPU only, a few seconds.
+- **One BLAS thread on the login node.** Without `OPENBLAS_NUM_THREADS=1`, OpenBLAS starts a thread per CPU it sees (32 on `discovery1`). Threads count against the login node's 64-process limit, so `pthread_create` failed from thread 22 on and the `cv2` import hung (2026-11-02). The `RLIMIT_NPROC 1546766` in its message is the ulimit, not the cap that was hit. `OMP_NUM_THREADS=1` does the same for torch's OpenMP pool.
+- **The wide scene is built by the same command.** `plain_mc` depends on `jezero`, so a clone that has only the 10 km tile also downloads the two CTX products (46 MB, on the login node) and runs `jezero_scene`, `jezero_mesh` and `jezero_matching_map` on `main`.
+- **Cost:** the rule reserves 1 GPU, 4 CPUs and 16 GB for at most 60 minutes, so at most 960 SUs (8 + 4 + 4 SUs per minute).
+- **Cost per sample is L40S time,** not comparable with the laptop runs in `docs/benchmarks/plain-mc.md`.
+- **Worked (2026-11-02):** job 13674053 on b18-18 (NVIDIA L40S) ran all 20 samples in 40 s (`sacct` Elapsed for the job step), with host memory peaking at 2.95 GB of the 16 GB requested. The scene steps ran first as `main` jobs. Results are in `docs/benchmarks/plain-mc.md` ("Wide-scene run").
+
+From tmux on `discovery1`, in the clone:
+
+```bash
+cd /project2/irahbari_1147/ckuizon/fidelis
+git pull
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 uv run --no-sync python -c "from lightglue import ALIKED, LightGlue; ALIKED(); LightGlue(features='aliked')"
+ls ~/.cache/torch/hub/checkpoints
+uv run --no-sync snakemake --profile profiles/carc plain_mc -n
+uv run --no-sync snakemake --profile profiles/carc plain_mc
+```
+
+If `git pull` changed `uv.lock` or `pyproject.toml`, run `uv sync` first ("uv environment on CARC"). The dry run (`-n`) should list `plain_mc` plus whatever scene steps are missing, every job with `slurm_account=irahbari_1147`. The estimate prints at the end of `.snakemake/slurm_logs/rule_plain_mc/<jobid>.log`; the results are `results/plain_mc/records.jsonl` and `estimate.json`.
 
 ## Running the Snakemake controller
 

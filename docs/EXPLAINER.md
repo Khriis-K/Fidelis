@@ -178,9 +178,21 @@ A refresher for explaining Fidelis to recruiters. Plain English first, key techn
 
 **What it taught us.** Re-check inherited facts against the bytes, even our own. And when a number blows up, ask what the check needs it for before accepting the worst case: the conservative bound and the correct bound are not always the same thing.
 
+### A bigger map that no longer fit on the laptop
+
+**The problem.** After the wide scene landed, rerunning the 20-descent Monte Carlo on the laptop crashed with the GPU out of memory, before a single descent finished.
+
+**How we noticed.** The crash was inside LightGlue, the matcher, not the renderer. The GPU was otherwise idle, so nothing else was competing for memory. The matcher compares every keypoint in the descent photo with every keypoint in the whole orbital map, and the wider map has about 7× the area. Counting showed 70,726 map keypoints, up from 14,290. The table of match scores grows with both counts, and with the renderer's ~3 GB already on the 8 GB card, it no longer fit.
+
+**What we did.** We didn't change the matcher to make it fit: shrinking its search or lowering its precision would change the system under test, and the run would no longer be comparable with the first one. Instead we ran the unchanged code on the university cluster, on a 48 GB L40S, through the same Snakemake workflow. Getting there surfaced three cluster gotchas. The compute nodes have no internet, so the matcher's weights have to be downloaded on the login node first. On the login node, the maths library tried to start 32 threads and hit the per-user process limit. And a newly added command wasn't installed, because the environment had only been re-synced when the lock file changed.
+
+**What it taught us.** Growing an input (here, the map) can quietly break a part that wasn't touched. The wide-scene ticket checked render time and memory, but never ran the navigator against the bigger map. Also: when something doesn't fit, move it to bigger hardware before changing the thing you're measuring.
+
 ## Headline results
 
-- **The pipeline runs end to end** (`docs/benchmarks/plain-mc.md`). 20 seeded descents over the Jezero mesh all got a fix, with errors of 1.38–6.12 m (median 2.73 m) at about 0.46 s per descent on the laptop GPU. Caveat: that's 0 failures in 20 at a *provisional* 12 m threshold, so the honest failure rate is "somewhere from 0 to 16%" (95% Wilson interval), and the descents are easier than flight. It proves the plumbing, not the reliability. It also predates the wide scene: it ran on the 10 km tile with tilt capped at 3°, so it hasn't been rerun under flight-like tilts yet. Numbers go here only once they're committed in `docs/benchmarks/` or `docs/adr/`, each with its caveat.
+- **The pipeline runs end to end** (`docs/benchmarks/plain-mc.md`). 20 seeded descents over the Jezero mesh all got a fix, with errors of 1.38–6.12 m (median 2.73 m) at about 0.46 s per descent on the laptop GPU. Caveat: that's 0 failures in 20 at a *provisional* 12 m threshold, so the honest failure rate is "somewhere from 0 to 16%" (95% Wilson interval), and the descents are easier than flight. It proves the plumbing, not the reliability. That run used the 10 km tile with tilt capped at 3°.
+- **Flight-like tilts and offsets, on the cluster** (`docs/benchmarks/plain-mc.md`). The same 20 seeds on the wide scene, with tilt up to 18° and offsets up to ±2.75 km (the largest drawn: 17.8° and 2.4 km), on one CARC L40S: again every descent got a fix, with errors of 0.76–5.62 m (median 1.63 m) at about 0.25 s per descent. Caveats: still 0 of 20 at the provisional 12 m, so still "0 to 16%". The navigator still gets the true attitude, which undoes tilt before matching. Only 3 of the 20 views saw any of the coarser outer ring (at most about 9% of the image, from a flat-ground approximation), so the ring is barely tested. The low sun (25°) still gives the four largest errors.
+Numbers go here only once they're committed in `docs/benchmarks/` or `docs/adr/`, each with its caveat.
 
 ## Honest limitations
 

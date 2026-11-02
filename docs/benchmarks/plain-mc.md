@@ -1,6 +1,6 @@
 # First plain Monte Carlo run (issue #8)
 
-The first end-to-end run of the simulation interface: 20 seeded descents through the Jezero mesh renderer, the camera model and the navigator, then P(fail) with a 95% Wilson interval. It shows that the pipeline runs end to end. **It isn't a failure estimate:** r is provisional, N is tiny, and the descents are easier than flight (see Caveats).
+The first end-to-end run of the simulation interface: 20 seeded descents through the Jezero mesh renderer, the camera model and the navigator, then P(fail) with a 95% Wilson interval. It shows that the pipeline runs end to end. A second run of the same seeds on the wide scene, with flight-like tilts and offsets, is under "Wide-scene run" below. **Neither is a failure estimate:** r is provisional, N is tiny, and the descents are easier than flight (see Caveats).
 
     uv run snakemake --profile profiles/local plain_mc
     uv run snakemake --profile profiles/local results/plain_mc/matches/seed_14.png
@@ -39,6 +39,45 @@ The table is generated from the second run's `results/plain_mc/records.jsonl`.
 - **Error:** median 2.73 m, range 1.38–6.12 m. All four descents under the 25° suns had the four largest errors (4.92–6.12 m); the 40° sun gave 2.64–3.26 m and the 55° suns 1.38–3.16 m. That's an observation from 20 samples, not a tested trend, but it's the direction you'd expect: long shadows that the map's photo doesn't have.
 - **Cost per sample** (render + camera model + navigation, wall clock): median 0.459 s over all 20 (0.456 s without seed 0), 0.379–0.582 s except seed 0 at 0.917 s, the first render in the process. That outlier is probably one-off GPU kernel compilation (not checked). Scene loading (1.5–1.9 s per sun, `docs/benchmarks/mesh-render.md`) is outside the timed window: the first run, before that fix, put it inside, and the first descent under each sun cost 1.85–2.73 s (below).
 
+## Wide-scene run (CARC L40S, #33 bounds)
+
+The same 20 seeds again, on the wide scene (`wide-scene.md`), with the sampler's #33 bounds: tilt 0–18°, offsets truncnorm(0, 1100 m) cut at ±2750 m. Config SHA-256 `34ad0b2f…`. Run on CARC: Slurm job 13674053, one NVIDIA L40S (node b18-18), 2 November 2026, through `snakemake --profile profiles/carc plain_mc` (`docs/carc.md`).
+
+It didn't run on the laptop. The wide matching map gives 70,726 keypoints, against 14,290 on the 10 km tile. On the 8 GB RTX 5070, LightGlue ran out of GPU memory matching a descent image against them (`torch.AcceleratorError: CUDA error: out of memory` in `sigmoid_log_double_softmax`). The L40S's peak GPU memory wasn't recorded, so how much headroom this needs is unknown. Host memory peaked at 2.95 GB (`sacct` MaxRSS).
+
+**P(fail) = 0/20 at PROVISIONAL r = 12 m, 95% Wilson interval [0, 0.161].** Every descent got a fix.
+
+| Seed | Sun (az, el) | Tilt (°) | Ring share | Error (m) | Inliers / matches | Cost (s) |
+|---|---|---|---|---|---|---|
+| 0 | 257, 40 | 17.8 | 0.00 | 1.46 | 2477 / 2601 | 0.771 |
+| 1 | 257, 40 | 11.5 | 0.07 | 2.84 | 1815 / 1854 | 0.245 |
+| 2 | 240, 25 | 16.9 | 0.04 | 4.55 | 2404 / 2587 | 0.308 |
+| 3 | 310, 55 | 2.9 | 0.00 | 2.76 | 1942 / 1988 | 0.263 |
+| 4 | 240, 55 | 12.5 | 0.00 | 1.24 | 2351 / 2391 | 0.263 |
+| 5 | 240, 55 | 1.0 | 0.00 | 1.47 | 1915 / 2003 | 0.235 |
+| 6 | 240, 55 | 2.7 | 0.00 | 1.48 | 2140 / 2200 | 0.231 |
+| 7 | 310, 55 | 14.5 | 0.00 | 2.39 | 2188 / 2239 | 0.246 |
+| 8 | 240, 55 | 12.0 | 0.00 | 1.61 | 2101 / 2230 | 0.259 |
+| 9 | 240, 55 | 8.1 | 0.00 | 1.24 | 2165 / 2261 | 0.228 |
+| 10 | 240, 55 | 0.5 | 0.00 | 0.76 | 1942 / 2052 | 0.228 |
+| 11 | 257, 40 | 7.2 | 0.00 | 1.01 | 1596 / 1737 | 0.232 |
+| 12 | 257, 40 | 1.6 | 0.00 | 2.26 | 1826 / 1883 | 0.220 |
+| 13 | 257, 40 | 7.0 | 0.00 | 1.09 | 1827 / 1986 | 0.271 |
+| 14 | 310, 25 | 6.6 | 0.00 | 4.99 | 1987 / 2145 | 0.297 |
+| 15 | 240, 25 | 14.1 | 0.00 | 5.27 | 2369 / 2560 | 0.269 |
+| 16 | 240, 55 | 15.3 | 0.00 | 1.62 | 2288 / 2415 | 0.250 |
+| 17 | 240, 55 | 14.7 | 0.09 | 1.64 | 2218 / 2269 | 0.227 |
+| 18 | 240, 25 | 6.9 | 0.00 | 5.62 | 1899 / 2083 | 0.273 |
+| 19 | 257, 40 | 7.7 | 0.00 | 2.91 | 2041 / 2185 | 0.265 |
+
+The table comes from the job's `results/plain_mc/records.jsonl` (on CARC; it isn't committed). **Ring share** is the fraction of the image that lands outside the HiRISE tile (4,753 m east–west, 5,010 m north–south half-widths). It was computed afterwards from each record's pose on a 64 × 64 grid of pixel rays, against **flat ground** at the camera's altitude, so it's an approximation that ignores relief.
+
+- **Error:** median 1.63 m, range 0.76–5.62 m. The four 25° suns again gave the four largest errors (4.55–5.62 m). The 40° sun gave 1.01–2.91 m and the 55° suns 0.76–2.76 m.
+- **Tilt barely shows.** Below 9° (11 seeds) the median error was 1.48 m; at 9° and above (9 seeds), 1.64 m. That's expected while the navigator gets the true attitude: the nadir warp removes the tilt before matching, so tilt only changes ground detail and perspective. It's 20 samples, not a tested trend.
+- **The ring was hardly tested.** Only 3 of 20 views saw any of it, at most 9% of the image (seed 17). Most offsets are well inside ±2750 m (truncnorm with σ = 1100 m), and reaching the ring takes a large offset and an outward tilt together. So this run says little about how the matcher does on the softer CTX terrain.
+- **Errors ran lower than the 10 km-tile run** under every sun: median 1.63 m against 2.73 m. Each seed drew the same sun in both runs, but the rest of each descent changed with the new bounds, and the GPU changed too. So this isn't a paired comparison, and nothing here says why.
+- **Cost per sample** (L40S): median 0.255 s over all 20 (0.250 s without seed 0), 0.220–0.308 s except seed 0 at 0.771 s, the first render in the process again. That's L40S time on the wide scene, not comparable with the laptop's 0.459 s on the tile.
+
 ## Same seed, same error? Not exactly, on the GPU
 
 The run was made twice (the second after the cost fix, which changes nothing about what's rendered or matched). Against the first run's values (below, as printed, two decimals), per seed the error moved by a median 0.08 m and at most 0.54 m (seed 10: 1.75 → 2.29 m); 8 of 20 moved more than 0.1 m, and inlier counts shifted by a few.
@@ -67,8 +106,8 @@ Against r in the tens of metres, the jitter is small. But it makes samples near 
 
 - **r = 12 m is a placeholder** (two 6 m map pixels), not the pilot study's r. No descent came near it, so P(fail) = 0 says only that these 20 descents all landed within 6.12 m.
 - **N = 20.** The Wilson upper bound, 16%, is the honest summary: anything from 0 to about 16% is consistent with this run.
-- **Easier than flight:** tilt capped at 3° and offsets at ±400 m by the tile, true attitude, 2 m-detail renders matched against a map from the same photo, no sky light. Issue #33 has since widened the scene and the sampler (tilt 0–18°, offsets ±2750 m; `wide-scene.md`); this run predates that and hasn't been repeated.
-- One machine, one GPU, two runs.
+- **Easier than flight:** tilt capped at 3° and offsets at ±400 m by the tile, true attitude, 2 m-detail renders matched against a map from the same photo, no sky light. Issue #33 has since widened the scene and the sampler (tilt 0–18°, offsets ±2750 m; `wide-scene.md`). The first run (20 seeds on the laptop, at most 3° and ±400 m) predates that; the wide-scene run above uses it, still with the true attitude.
+- The 10 km-tile results: one machine, one GPU, two runs. The wide-scene result: one run, on one L40S.
 
 ## First run, as printed
 
