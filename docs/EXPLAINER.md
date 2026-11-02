@@ -154,4 +154,10 @@ None yet. Numbers go here only once they're committed in `docs/benchmarks/` or `
 
 - **The navigator has only been checked in near-perfect conditions.** Straight down, north up, one test position, two suns, pretrained matcher. The descent renders and the map come from the same photo, so they differ only in resolution and shading, which flatters matching. Camera heading isn't handled yet: turned 90° from north-up, matching fails (`docs/benchmarks/navigator.md`). The map's terrain heights come from the same 4 m DTM as the rendered terrain, finer than the real onboard elevation map.
 
+- **The "blurry map" risk is retired only for 2 m renders.** The worry was sharp descent photos (from 0.25 m HiRISE detail) against the 6 m map. Our renders only carry the mesh texture's 2 m detail, so the sweep tested a milder gap than the one the spec feared. When sharper renders exist (the splat scenes), the sweep has to be rerun before this counts as settled.
+
+- **"Sun matching the map" is our interpretation.** The map's photo has HiRISE's own lighting baked in, and no sun angle reproduces it exactly. We used an overhead sun, which adds the least shading on top, as the closest stand-in. That's a judgment call, not a literal match.
+
+- **About 1.9 m of the perfect-conditions error is unexplained.** Near 2.2 km the fix sits 1.88 m off; near 4.2 km, 0.63 m. It's far below the 40 m that matters, so it wasn't chased. But it's big enough to hide a half-pixel coordinate bug from a test at that altitude alone (mutation testing caught exactly that), which is why the GPU test checks both ends of the band.
+
 - **The terrain is flat; Mars is curved.** The tile is a flat map, while the real surface falls away from it by 3.7 m at 5 km from the centre. That's below a descent-camera pixel at those heights, and it isn't modelled.

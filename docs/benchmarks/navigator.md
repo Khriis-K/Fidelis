@@ -80,3 +80,5 @@ The CPU tests check the same chain without a renderer: an analytic nadir view of
 - **The RANSAC threshold is OpenCV's default, 8 px.** At 2.2 km that's 34 m of ground, about six CTX map pixels.
 
 **Caveats:** one laptop GPU, one camera position, nadir or near-nadir views, two suns, pretrained (not fine-tuned) LightGlue. The sweep's maps are block averages of the 2 m texture (CTX's optics and noise aren't modelled; see `src/fidelis/terrain/matching_map.py`), and the descent renders come from the same orthoimage as the map, so the two share everything but resolution and the renderer's shading. That makes this a best case.
+
+**What this does and doesn't settle.** The spec's risk was HiRISE-sharp descent renders (0.25 m detail) against the 6 m map. These renders carry only the 2 m texture's detail, so the sweep retires the risk for 2 m renders only; rerun it when sharper renders (the splat scenes) exist. The zenith sun is this check's reading of "sun matching the map", since no sun reproduces the orthoimage's baked-in HiRISE lighting. The 1.88 m error near 2.2 km is unexplained.
