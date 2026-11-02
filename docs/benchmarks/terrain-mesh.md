@@ -2,7 +2,7 @@
 
 The Jezero ground-truth mesh (`snakemake jezero_mesh`, code in `src/fidelis/terrain/mesh.py`), checked against the tile it was built from on 2026-11-01. Reproduce with:
 
-    uv run python scripts/check_terrain_mesh.py data/jezero/mesh data/jezero/tile render_vs_ortho.png
+    uv run python scripts/check_terrain_mesh.py data/jezero/mesh data/jezero/tile data/jezero/mesh/render_vs_ortho.png
 
 ## The mesh
 
@@ -22,7 +22,7 @@ The Jezero ground-truth mesh (`snakemake jezero_mesh`, code in `src/fidelis/terr
 ## Texture registration
 
 - **Unit test, through the renderer's own lookup.** The synthetic orthoimage is a ramp (value = column + 5 × row), so the value Mitsuba samples at a vertex's UV says exactly where in the image it landed. Every vertex samples the ramp value at its own map position, within 0.05 grey levels (0.05 ortho pixels).
-- **Real tile, top-down render.** A Mitsuba orthographic render from straight above (uniform sky, 1000 × 1000 px at 2 m/px, 16 samples per pixel, `cuda_ad_rgb` on the laptop's RTX 5070) against the orthoimage averaged to 2 m. **Correlation 0.972, phase-correlation shift 0.00 px** in both axes. The same render flipped vertically correlates at −0.109, so the check does detect a wrong texture. The remaining mismatch is expected: crater floors see less sky, so they render darker, and 16 samples leave noise.
+- **Real tile, top-down render.** A Mitsuba orthographic render from straight above (uniform sky, 1000 × 1000 px at 2 m/px, 16 samples per pixel, `cuda_ad_rgb` on the laptop's RTX 5070) against the orthoimage averaged to 2 m. **Correlation 0.972, phase-correlation shift 0.00 px** in both axes. Mirrored north–south, the same render correlates at −0.109, and mirrored east–west at 0.071, so the check does detect a wrong texture. The remaining mismatch is expected: crater floors see less sky, so they render darker, and 16 samples leave noise.
 
 **Caveat:** phase correlation resolves a fraction of a 2 m pixel, not centimetres. The sub-pixel guarantee comes from the unit test on synthetic data.
 

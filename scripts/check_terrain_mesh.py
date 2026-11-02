@@ -6,7 +6,7 @@
    orthoimage averaged to 2 m. A misplaced or flipped texture drops the correlation and
    shows up as a shift. Uses the GPU for a few seconds.
 
-    uv run python scripts/check_terrain_mesh.py data/jezero/mesh data/jezero/tile render_vs_ortho.png
+    uv run python scripts/check_terrain_mesh.py data/jezero/mesh data/jezero/tile data/jezero/mesh/render_vs_ortho.png
 """
 
 import json
@@ -62,15 +62,20 @@ scene = mi.load_dict(
     }
 )
 img = np.array(mi.render(scene))[..., 0]
-with rasterio.open(tile_dir / "ortho.tif") as o:
-    ortho = o.read(1).astype(np.float32) / 255
-margin = int((1002 - half) * 4)  # tile half-width 1002 m, ortho 4 px/m
-ref = block_mean(ortho[margin:-margin, margin:-margin], 8)
+with rasterio.open(tile_dir / "ortho.tif") as ortho_src:
+    ortho = ortho_src.read(1).astype(np.float32) / 255
+    px_per_m = 1 / ortho_src.res[0]
+left, _, right, _ = rec["bounds"]
+margin = round(((right - left) / 2 - half) * px_per_m)  # crop the ortho to the rendered square
+ref = block_mean(ortho[margin:-margin, margin:-margin], round(2 * half / img.shape[0] * px_per_m))
 corr = np.corrcoef(img.ravel(), ref.ravel())[0, 1]
 (dx, dy), _ = cv2.phaseCorrelate(ref.astype(np.float64), img.astype(np.float64))
-flip = np.corrcoef(img[::-1].ravel(), ref.ravel())[0, 1]
+# Controls: a mirrored texture would look like these.
+flip_ns = np.corrcoef(img[::-1].ravel(), ref.ravel())[0, 1]
+flip_ew = np.corrcoef(img[:, ::-1].ravel(), ref.ravel())[0, 1]
 print(
-    f"registration: render vs ortho correlation {corr:.3f} (vertically flipped: {flip:.3f});",
+    f"registration: render vs ortho correlation {corr:.3f}",
+    f"(mirrored north-south: {flip_ns:.3f}, east-west: {flip_ew:.3f});",
     f"shift {dx:+.2f}, {dy:+.2f} px at 2 m/px",
 )
 side = np.concatenate([ref, img / max(img.max(), 1e-6) * ref.max()], axis=1)
