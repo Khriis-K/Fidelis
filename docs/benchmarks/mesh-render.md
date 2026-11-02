@@ -75,6 +75,7 @@ The target camera is LCAM-like: **1024 × 1024 px, 90° field of view** (Maki et
 - `scalar_rgb` (CPU, the unit tests) repeats bit for bit. A unit test asserts the tolerance and that a different seed changes the image.
 - `cuda_ad_rgb` (the GPU): the largest same-seed difference over five suns was **1.8e-7**. It isn't zero because the GPU film adds samples atomically, in no fixed order.
 - **Monte Carlo noise at 64 spp:** RMS difference from a 1024 spp render of the same view was **1.2–1.6% of the median pixel**. Two 64 spp renders with different seeds differ by 1.7–2.2% RMS. 64 spp is the setting these measurements use, not a requirement. The sample count for real renders is a fidelity choice, which belongs to the fidelity levels (#10).
+- Across processes the tolerance didn't hold: one 256 spp view differed by up to 1.34e-6 between two processes (`docs/benchmarks/plain-mc.md`, `scripts/check_gpu_repeatability.py`). Small as that is, the navigator amplifies it.
 - Not checked: CPU against GPU, or one GPU model against another. They'll differ by more than 1e-6, since floating-point order differs. Comparisons across machines should use the noise level above as the yardstick, not the determinism tolerance.
 
 ## Shadows move with the sun (acceptance: documented visual check across at least two angles)

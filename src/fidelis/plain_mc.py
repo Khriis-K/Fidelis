@@ -10,7 +10,9 @@ keeps an upper bound above zero when no failures were seen, and stays inside [0,
     uv run fidelis-plain-mc config/jezero.yaml data/jezero results/plain_mc
 
 writes records.jsonl (one SimulationRecord per seed; any of them reruns from its seed
-and the config) and estimate.json.
+and the config) and estimate.json. On the GPU a rerun repeats the camera image but not
+the exact error, which the navigator's sensitivity moves by up to 0.839 m so far: the
+record is the result (docs/adr/0001-gpu-reproducibility-is-image-level.md).
 """
 
 import argparse

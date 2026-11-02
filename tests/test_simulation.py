@@ -30,6 +30,9 @@ ORIGIN = (LEFT + MAP_RES * MAP_SIZE / 2, TOP - MAP_RES * MAP_SIZE / 2)  # world 
 GROUND_Z = -2500.0
 K = Intrinsics.from_fov(256, 256, 90)
 MAP_PIXEL_M = MAP_RES * EAST_SCALE  # the map's coarser ground pixel, east-west
+# GPU camera images of the same seed: 19x the largest in-process jitter measured (5.36e-7),
+# about 1/700 of a wrongly seeded noise draw's difference.
+CAMERA_IMAGE_REPEAT_TOLERANCE = 1e-5
 
 
 def texture(size, seed=0):
@@ -271,13 +274,14 @@ def test_perfect_conditions_on_the_jezero_mesh_locate_within_half_a_ctx_map_pixe
     assert first.status == "ok"
     assert first.error_m < 3.0
     assert first.gpu != "cpu"
-    # Same sample and seed, same camera image, up to the renderer's GPU jitter (under 1e-6
-    # of radiance; up to 3.6e-7 measured on camera images). Not the same error: the navigator
-    # turns that jitter into up to ~0.6 m, even within one process, so the error can't be
-    # compared (docs/benchmarks/plain-mc.md). With camera noise on, a seed that didn't fix
-    # the noise would differ by about the noise level, 1e-3, which 1e-5 catches.
+    # Same sample and seed, same camera image, up to the renderer's GPU jitter: within one
+    # process camera images have differed by at most 5.36e-7 (scripts/check_gpu_repeatability.py).
+    # Not the same error: the navigator has turned that jitter into up to 0.839 m, so errors
+    # aren't compared (docs/adr/0001-gpu-reproducibility-is-image-level.md). A seed that didn't
+    # fix the camera noise would differ by about 7e-3 RMS at this noise SD, far past the tolerance.
+    # Not covered here: the scenario's own draw from a seed (tests/test_scenario.py does that).
     noisy = scenario(offset_east_m=150.0, offset_north_m=-230.0, altitude_m=altitude, noise_sd=0.005)
     once, again = sim.run(noisy, "mesh"), sim.run(noisy, "mesh")
-    assert np.abs(again.image - once.image).max() < 1e-5
+    assert np.abs(again.image - once.image).max() < CAMERA_IMAGE_REPEAT_TOLERANCE
     # Records stay JSON-safe on the GPU path too.
     assert SimulationRecord(**json.loads(json.dumps(asdict(first)))) == first

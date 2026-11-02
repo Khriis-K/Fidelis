@@ -45,15 +45,23 @@ The run was made twice (the second after the cost fix, which changes nothing abo
 
 ### Why: a tiny render jitter, amplified by the navigator
 
-`uv run python scripts/check_gpu_repeatability.py data/jezero` separates the stages (seed 10, two processes, then one process; numbers from one run of it):
+`uv run python scripts/check_gpu_repeatability.py data/jezero` separates the stages for seed 10 in two processes, then reruns four seeds three times in one process. Numbers below are from one run of it. Another run of the same script differs in detail, because it's measuring jitter; where that matters, the largest value any run showed is given too.
 
-- **The render jitters a little.** Seed 10's radiance differed between the two processes by at most 1.34e-6 (median pixel about 0.32), and its camera image by at most 2.03e-6, in 944,625 of 1,048,576 pixels. That's Mitsuba's CUDA film adding samples in no fixed order. It's slightly above the 1e-6 that `docs/benchmarks/mesh-render.md` states (measured at 64 spp on other views).
-- **The navigator doesn't.** One saved image, located in each process: 1.7437 m and 1,830 inliers in both. The same matched pairs solved five times: zero spread. So ALIKED, LightGlue and PnP + RANSAC repeat exactly on the same input.
-- **But it amplifies.** That saved image with 1e-6 Gaussian noise added (four draws) located at 1.8648, 2.2893, 1.8151 and 1.8581 m, against 1.7437 m without. A change far below anything a camera could record moves which keypoints and matches survive, and the fix with them.
-- **So it happens within one process too.** Three runs of a seed in one process: seed 10 2.2857 / 2.2876 / 2.2857 m, seed 15 5.8622 / 5.9472 / 5.6190 m, seed 0 2.6346 / 2.5088 / 2.5088 m, seed 4 1.7223 / 1.7639 / 1.7474 m, with camera images at most 4.17e-7 apart.
-- **Exact GPU renders aren't on offer.** Mitsuba's `samples_per_pass = 1` (one sample per pixel per launch, so no two samples race for a pixel) still differed across processes by up to 7.75e-7, and took 0.59 s against 0.257 s at 256 spp. Mitsuba also marks the option deprecated.
+- **The render jitters a little.** Seed 10's radiance (median pixel 0.321) differed between the two processes by at most 2.38e-7. Its camera image differed by at most 3.70e-6, in 374,217 of 1,048,576 pixels. The camera image differs by more than the render because the exposure scales it by its own 99.9th percentile, which jitters too. Within one process, camera images differed by at most 4.77e-7. The cause is Mitsuba's CUDA film adding samples in no fixed order. An earlier run of the script saw radiance differ by 1.34e-6 across processes, above the 1e-6 that `docs/benchmarks/mesh-render.md` states.
+- **The navigator doesn't jitter.** One saved image, located twice in each process, gave 2.2856 m and 1,833 inliers every time, with identical matches. The same matched pairs, solved five times, gave zero spread. ALIKED, LightGlue and PnP + RANSAC repeat exactly on the same input, within a process and across processes.
+- **But it amplifies.** That image with Gaussian noise of SD 1e-7 added (below the renders' own jitter, four draws) located at 2.2857, 2.2856, 2.1467 and 1.7678 m. With SD 1e-6 it located at 2.2857, 1.8151, 1.7424 and 2.0794 m. A change far below anything a camera records moves which keypoints and matches survive, and the fix moves with them. For seed 10 the fix seems to hop between answers near 1.75 and 2.29 m.
+- **So it happens within one process too.** Three runs of each seed in one process gave: seed 10 1.7679 / 2.0166 / 2.2876 m; seed 15 5.4581 / 5.6234 / 5.5334 m; seed 0 2.5088 / 2.5088 / 2.3375 m; seed 4 1.7246 / 1.7480 / 1.8969 m. The widest in-process spread in any run of the script was seed 15's 0.839 m (5.1148 to 5.9538 m).
+- **Exact GPU renders aren't on offer.** Mitsuba's `samples_per_pass = 1` gives one sample per pixel per launch, so no two samples race for a pixel. Even so, it differed across processes by up to 4.77e-7, and took 0.565-0.600 s against 0.225-0.227 s at 256 spp. Mitsuba's own warning, printed when the script runs, calls the option deprecated.
 
-What it means: the same seed regenerates the same camera image to within about 1e-6 on the GPU, but not the same error, which moves by up to about 0.6 m. On the CPU the whole pipeline repeats exactly within one process (across processes isn't checked). The GPU seam test now checks the camera images (within 1e-5, which a wrongly seeded noise draw, about 1e-3, would fail) instead of the errors. Against r in the tens of metres the jitter is small, but it makes samples near r partly random, and it bounds how closely two fidelity levels' errors can agree: the pilot study should measure it per level before r is set.
+What it means:
+
+- On the GPU, the same seed regenerates the same camera image, to within 3.70e-6 across processes and 4.77e-7 within one in this run.
+- It doesn't regenerate the same error, which has moved by up to 0.839 m.
+- On the CPU the whole pipeline repeats exactly within one process (across processes isn't checked).
+
+So the GPU seam test now checks camera images, within 1e-5 and in one process, instead of errors. That would catch a wrongly seeded camera-noise draw, which at the test's noise SD of 0.005 differs by about 7e-3 RMS.
+
+Against r in the tens of metres, the jitter is small. But it makes samples near r partly random, and it limits how closely two fidelity levels' errors can agree. The decision and what it costs are in `docs/adr/0001-gpu-reproducibility-is-image-level.md`.
 
 ## Caveats
 

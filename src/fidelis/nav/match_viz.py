@@ -7,7 +7,8 @@ those are the ones worth looking at.
 
     uv run fidelis-match-viz config/jezero.yaml data/jezero 12 results/plain_mc/matches/seed_12.png
 
-reruns seed 12 from the config and draws it.
+reruns seed 12 from the config and draws it. On the GPU the rerun's error can differ from
+the seed's record by up to the navigator's jitter (docs/adr/0001-gpu-reproducibility-is-image-level.md).
 """
 
 import argparse
