@@ -247,7 +247,7 @@ rule splat_train:
         gpu=1,
         cpus_per_task=8,
         mem_mb=64000,
-        runtime=240,  # minutes; a guess for 30k steps until the first run's log says
+        runtime=45,  # minutes; the first run took 12 min 49 s on an L40S (docs/benchmarks/splat.md)
     envmodules:
         *CUDA_MODULES,
     shell:

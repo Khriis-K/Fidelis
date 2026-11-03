@@ -108,8 +108,11 @@ def test_the_splat_costs_less_per_sample_than_the_mesh(simulator):
 
 
 def test_a_view_of_empty_sky_gives_a_valid_failure_record(simulator):
-    # Tilted 120 deg the camera looks up, past every Gaussian: nothing to match.
-    record = simulator.run(scenario(tilt_deg=120.0), "splat").record
+    # "Sky" as in empty space: 500 m below the ground, looking straight down, every Gaussian
+    # is behind the camera, so the image is black with nothing to match. Not a camera tilted
+    # up at the real sky: a view reaching the horizon has no nadir image, and the navigator
+    # refuses one outright (the sampler's 18 deg tilt never gets there).
+    record = simulator.run(scenario(altitude_m=-500.0), "splat").record
     assert record.status != "ok"
     assert record.estimated_position is None and record.error_m is None
     assert record.inlier_count == 0
