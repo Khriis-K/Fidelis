@@ -17,6 +17,21 @@ CUDA_MODULES = [
 
 configfile: "config/jezero.yaml"
 
+CONFIG = "config/jezero.yaml"
+
+
+# Rules take the config file as ancient(): its timestamp never reruns them, so a comment
+# or another rule's setting can't send the scene or a splat back through the queue. What
+# a rule does read goes in its params, and Snakemake reruns it when those change.
+def config_values(*keys):
+    return {key: config[key] for key in keys}
+
+
+# The matching map's resolutions, without their source notes: rewording a citation changes nothing.
+MAP_RESOLUTIONS = {key: value["value_m"] for key, value in config["matching_map"].items()}
+# What fidelis-plain-mc and fidelis-match-viz read: the sampler, the simulator, the run.
+MC_CONFIG = config_values("plain_mc", "scenario", "simulation", "suns", "tile", "scene")
+
 
 JEZERO = "data/jezero"
 
@@ -88,7 +103,9 @@ rule jezero_tile:
     input:
         f"{JEZERO}/raw/dtm.verified",
         f"{JEZERO}/raw/ortho.verified",
-        "config/jezero.yaml",
+        ancient(CONFIG),
+    params:
+        config_used=config_values("tile", "mars_radius_m") | MAP_RESOLUTIONS,
     output:
         f"{JEZERO}/tile/dtm.tif",
         f"{JEZERO}/tile/ortho.tif",
@@ -108,7 +125,9 @@ rule jezero_scene:
         f"{JEZERO}/tile/tile.json",
         f"{JEZERO}/raw/ctx_dtm.verified",
         f"{JEZERO}/raw/ctx_ortho.verified",
-        "config/jezero.yaml",
+        ancient(CONFIG),
+    params:
+        config_used=config_values("scene", "mars_radius_m"),
     output:
         f"{JEZERO}/scene/dtm.tif",
         f"{JEZERO}/scene/ortho.tif",
@@ -143,7 +162,9 @@ rule jezero_mesh:
 rule jezero_matching_map:
     input:
         rules.jezero_scene.output,
-        "config/jezero.yaml",
+        ancient(CONFIG),
+    params:
+        config_used=MAP_RESOLUTIONS,
     output:
         f"{JEZERO}/matching_map/map.tif",
         f"{JEZERO}/matching_map/map.json",
@@ -158,7 +179,9 @@ rule jezero_matching_map:
 rule plain_mc:
     input:
         rules.jezero.input,
-        "config/jezero.yaml",
+        ancient(CONFIG),
+    params:
+        config_used=MC_CONFIG,
     output:
         "results/plain_mc/records.jsonl",
         "results/plain_mc/estimate.json",
@@ -187,7 +210,9 @@ rule splat:
 rule splat_views:
     input:
         rules.jezero.input,
-        "config/jezero.yaml",
+        ancient(CONFIG),
+    params:
+        config_used=config_values("scenario", "suns", "tile", "scene") | {"views": config["splat"]["views"]},
     output:
         f"{SPLAT}/views/train.npy",
         f"{SPLAT}/views/heldout.npy",
@@ -208,7 +233,10 @@ rule splat_train:
     input:
         rules.splat_views.output,
         f"{JEZERO}/mesh/mesh.json",
-        "config/jezero.yaml",
+        ancient(CONFIG),
+    params:
+        # Not log_every: how often training prints doesn't change the splat.
+        config_used=config_values("suns") | {k: config["splat"][k] for k in ("steps", "ssim_weight", "quality")},
     output:
         f"{SPLAT}/splat.pt",
         f"{SPLAT}/splat.ply",
@@ -232,7 +260,9 @@ rule plain_mc_splat:
     input:
         rules.jezero.input,
         rules.splat.input,
-        "config/jezero.yaml",
+        ancient(CONFIG),
+    params:
+        config_used=MC_CONFIG,
     output:
         "results/plain_mc_splat/records.jsonl",
         "results/plain_mc_splat/estimate.json",
@@ -252,7 +282,9 @@ rule plain_mc_splat:
 rule plain_mc_mesh_pinned:
     input:
         rules.jezero.input,
-        "config/jezero.yaml",
+        ancient(CONFIG),
+    params:
+        config_used=MC_CONFIG,
     output:
         "results/plain_mc_mesh_pinned/records.jsonl",
         "results/plain_mc_mesh_pinned/estimate.json",
@@ -271,7 +303,9 @@ rule plain_mc_mesh_pinned:
 rule match_viz:
     input:
         rules.jezero.input,
-        "config/jezero.yaml",
+        ancient(CONFIG),
+    params:
+        config_used=MC_CONFIG,
     output:
         "results/plain_mc/matches/seed_{seed}.png",
     wildcard_constraints:

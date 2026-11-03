@@ -144,3 +144,16 @@ def test_carc_stays_under_the_gpu_partition_queue_cap():
     profile = yaml.safe_load((REPO / "profiles/carc/config.yaml").read_text())
 
     assert 0 < profile["jobs"] < 100  # the gpu partition allows 100 queued jobs per user
+
+
+def test_no_rule_reruns_just_because_the_config_file_was_touched():
+    # Rules read config/jezero.yaml as ancient() and list the values they use as params, so a
+    # comment edit can't rerun the scene or the multi-thousand-SU splat training (#9).
+    snakefile = (REPO / "workflow/Snakefile").read_text()
+    blocks = re.split(r"^rule ", snakefile, flags=re.MULTILINE)[1:]
+    readers = {b.split(":", 1)[0]: b for b in blocks if "CONFIG" in b or "config/jezero.yaml" in b}
+
+    assert {"jezero_tile", "splat_train", "plain_mc_splat"} <= set(readers)
+    for rule, block in readers.items():
+        assert '"config/jezero.yaml"' not in block, f"{rule} depends on the config file's timestamp"
+        assert "ancient(CONFIG)" in block and "config_used=" in block, rule

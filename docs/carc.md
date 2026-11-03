@@ -242,6 +242,22 @@ The training log is `.snakemake/slurm_logs/rule_splat_train/<jobid>.log`; its la
 srun --account=irahbari_1147 --partition=gpu --gres=gpu:l40s:1 -c 4 --mem 32G -t 30 bash -c "module purge && module load ver/2607 gcc/15.3.0 cuda/13.0.3 && uv run --no-sync pytest -m gpu tests/test_simulation_splat.py -v"
 ```
 
+## Config edits and reruns
+
+Every rule that reads `config/jezero.yaml` takes it as `ancient()`, so the file's timestamp never reruns anything, and lists the values it actually reads as `params`. Snakemake reruns a rule when its params change. So a comment edit, or a change to another rule's setting, reruns nothing; changing `tile.size_m` reruns the scene and everything after it; changing `splat.steps` reruns training. Before this, any config edit rebuilt the whole scene: that's why the first `splat` run (2026-11-02) also reran `jezero_tile`, `jezero_scene`, `jezero_mesh` and `jezero_matching_map`.
+
+**One-time migration.** Outputs built before this change have no params on record, so Snakemake reads that as "changed" and plans a rebuild, the splat training included. Clear their old records once, after the current run has finished (never while a workflow is running), in the clone:
+
+```bash
+uv run --no-sync snakemake --profile profiles/carc --list-params-changes splat plain_mc_splat plain_mc_mesh_pinned plain_mc
+uv run --no-sync snakemake --profile profiles/carc --cleanup-metadata $(uv run --no-sync snakemake --profile profiles/carc --list-params-changes splat plain_mc_splat plain_mc_mesh_pinned plain_mc 2>/dev/null | grep -v '^Using\|^Building')
+uv run --no-sync snakemake --profile profiles/carc splat plain_mc_splat plain_mc_mesh_pinned -n
+```
+
+The first line lists what would be cleared. The last should plan only `preflight` (and `plain_mc`, if its results are older than the scene rebuilt on 2026-11-02). It only deletes Snakemake's bookkeeping in `.snakemake/metadata`, never data. Checked on the laptop's copy of the workflow (2026-11-02): before it, a dry run planned the whole scene again; after it, only a `plain_mc` whose results really did predate the scene.
+
+To rerun one step on purpose: `--forcerun <rule>`.
+
 ## Running the Snakemake controller
 
 The Snakemake controller process has to stay alive for the whole workflow. It's light, but it runs for a long time. Options:
