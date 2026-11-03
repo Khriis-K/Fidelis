@@ -19,6 +19,7 @@ set-resources:
   - plain_mc:gpu_model=l40s
   - match_viz:gpu_model=l40s
   - plain_mc_splat:gpu_model=l40s
+  - plain_mc_mesh_pinned:gpu_model=l40s
   # Not timed, but gsplat's one build cache is per GPU type: run one type at a time (docs/carc.md).
   - splat_views:gpu_model=l40s
   - splat_train:gpu_model=l40s

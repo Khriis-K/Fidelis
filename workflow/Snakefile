@@ -247,6 +247,25 @@ rule plain_mc_splat:
         f"fidelis-plain-mc config/jezero.yaml {JEZERO} results/plain_mc_splat --fidelity splat --sun-index {SPLAT_SUN}"
 
 
+# The same seeds on the mesh, under the same pinned sun: plain_mc mixes all five suns, so
+# only this run compares fidelity alone with plain_mc_splat. `snakemake plain_mc_mesh_pinned`.
+rule plain_mc_mesh_pinned:
+    input:
+        rules.jezero.input,
+        "config/jezero.yaml",
+    output:
+        "results/plain_mc_mesh_pinned/records.jsonl",
+        "results/plain_mc_mesh_pinned/estimate.json",
+    resources:
+        gpu=1,
+        cpus_per_task=4,
+        mem_mb=16000,
+        runtime=60,
+    shell:
+        f"fidelis-plain-mc config/jezero.yaml {JEZERO} results/plain_mc_mesh_pinned --fidelity mesh"
+        f" --sun-index {SPLAT_SUN}"
+
+
 # The match picture for any seed, rerun from the config:
 # `snakemake results/plain_mc/matches/seed_12.png`.
 rule match_viz:

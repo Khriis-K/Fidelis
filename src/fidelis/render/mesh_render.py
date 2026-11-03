@@ -50,6 +50,11 @@ class Sun:
         return np.array([math.sin(az) * math.cos(el), math.cos(az) * math.cos(el), math.sin(el)])
 
 
+def config_suns(scene: dict) -> list[Sun]:
+    """The scene config's sun angles, in sun_index order."""
+    return [Sun(s["azimuth_deg"], s["elevation_deg"]) for s in scene["suns"]]
+
+
 def terrain_scene(mesh_dir: Path, sun: Sun):
     """The textured terrain (the tile, and the CTX ring if built) lit by the sun.
 

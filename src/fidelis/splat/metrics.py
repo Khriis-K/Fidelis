@@ -9,7 +9,8 @@ and C2 = (0.03 L)^2 for peak L. The same function is training's SSIM loss, so it
 torch tensors and keeps gradients.
 
 Every report carries a constant-image baseline (each view replaced by its mean
-brightness) beside the splat's numbers: a gate the baseline can pass means nothing.
+brightness) beside the splat's numbers, and fails if any constant view passes the gate:
+on low-contrast terrain a constant image's PSNR, 20 log10(peak / sd), can clear the bar.
 """
 
 import math
@@ -86,13 +87,18 @@ def _summary(views: list[dict]) -> dict:
 
 
 def quality_report(images, references, gate: QualityGate) -> dict:
-    """Per-view PSNR and SSIM of `images` against `references`; passed only if every view passes the gate."""
+    """Per-view PSNR and SSIM of `images` against `references`.
+
+    Passed only if every view passes the gate and every constant-image view fails it: a
+    gate a blank picture can clear says nothing about the splat.
+    """
     views = _scores(images, references)
     baseline = _scores([np.full_like(r, np.mean(r)) for r in references], references)
+    rejected = not any(gate.passes(v) for v in baseline)
     return {
         "gate": {"psnr_db_min": gate.psnr_db_min, "ssim_min": gate.ssim_min},
-        "passed": all(gate.passes(v) for v in views),
+        "passed": rejected and all(gate.passes(v) for v in views),
         **_summary(views),
         "views": views,
-        "constant_baseline": _summary(baseline),
+        "constant_baseline": _summary(baseline) | {"rejected": rejected},
     }

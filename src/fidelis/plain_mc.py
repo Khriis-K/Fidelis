@@ -25,9 +25,8 @@ from statistics import NormalDist, median
 
 import yaml
 
-from fidelis.scenario import ScenarioConfig, draw, load_config, pin_sun
+from fidelis.scenario import MC_SEED_LIMIT, ScenarioConfig, draw, load_config, pin_sun
 from fidelis.simulation import SimulationRecord
-from fidelis.splat.views import MC_SEED_LIMIT
 from fidelis.terrain.fetch import sha256_of
 
 

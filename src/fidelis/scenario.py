@@ -107,6 +107,11 @@ def parse_distribution(spec: dict) -> Distribution:
     return cls(*(cast(spec[p]) for p in params))
 
 
+# Monte Carlo seeds stay below this; splat training and held-out views use seeds from it up
+# (fidelis.splat.views), so no descent renders a pose a splat trained on.
+MC_SEED_LIMIT = 1_000_000_000
+
+
 @dataclass(frozen=True)
 class Scenario:
     seed: int

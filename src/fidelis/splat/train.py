@@ -113,7 +113,7 @@ def main() -> int:
     parser.add_argument("out_dir", type=Path)
     args = parser.parse_args()
 
-    from fidelis.render.mesh_render import Sun
+    from fidelis.render.mesh_render import config_suns
     from fidelis.render.splat_render import render
     from fidelis.splat.model import export_ply, init_from_mesh, save_checkpoint
     from fidelis.splat.views import load_views
@@ -122,8 +122,7 @@ def main() -> int:
     scene = yaml.safe_load(args.config.read_text(encoding="utf-8"))
     section = scene["splat"]
     views, heldout = load_views(args.views_dir, "train"), load_views(args.views_dir, "heldout")
-    sun = scene["suns"][views.sun_index]
-    params = init_from_mesh(args.mesh_dir, Sun(sun["azimuth_deg"], sun["elevation_deg"]))
+    params = init_from_mesh(args.mesh_dir, config_suns(scene)[views.sun_index])
     print(f"{len(params['means'])} Gaussians from the mesh; {len(views.poses)} training views", flush=True)
 
     start = time.perf_counter()
@@ -142,7 +141,7 @@ def main() -> int:
 
     meta = {
         "sun_index": views.sun_index,
-        "sun": sun,
+        "sun": scene["suns"][views.sun_index],
         "steps": section["steps"],
         "gaussians": len(trained["means"]),
         "train_s": train_s,
@@ -152,14 +151,15 @@ def main() -> int:
     save_checkpoint(args.out_dir / "splat.pt", trained, meta)
     export_ply(args.out_dir / "splat.ply", trained)
     path = args.out_dir / "quality.json"
-    tmp = path.with_name(path.name + ".tmp")
+    tmp = path.with_name(path.stem + ".tmp" + path.suffix)
     tmp.write_text(json.dumps(meta | {"heldout": report}, indent=2) + "\n", encoding="utf-8")
     tmp.replace(path)
 
-    worst, baseline = report["worst"], report["constant_baseline"]["worst"]
+    worst, baseline = report["worst"], report["constant_baseline"]
     print(
         f"held-out worst PSNR {worst['psnr_db']:.2f} dB, SSIM {worst['ssim']:.4f}"
-        f" (constant image: {baseline['psnr_db']:.2f} dB, {baseline['ssim']:.4f});"
+        f" (constant image: {baseline['worst']['psnr_db']:.2f} dB, {baseline['worst']['ssim']:.4f},"
+        f" {'rejected' if baseline['rejected'] else 'NOT rejected'});"
         f" gate {'PASSED' if report['passed'] else 'FAILED'}"
     )
     return 0

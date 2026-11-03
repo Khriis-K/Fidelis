@@ -220,20 +220,20 @@ If `git pull` changed `uv.lock` or `pyproject.toml`, run `uv sync` first ("uv en
 
 ## Splat scene on CARC (#9)
 
-`snakemake splat` renders the training views (`splat_views`) and trains one splat scene under the config's `splat.sun_index` (`splat_train`); `snakemake plain_mc_splat` then runs plain Monte Carlo on it. All three are pinned to `l40s` in `profiles/carc`.
+`snakemake splat` renders the training views (`splat_views`) and trains one splat scene under the config's `splat.sun_index` (`splat_train`); `snakemake plain_mc_splat` then runs plain Monte Carlo on it. `plain_mc_mesh_pinned` runs the same seeds on the mesh under the same pinned sun: `plain_mc` mixes all five suns, so only this run compares the two fidelities on their own. All four are pinned to `l40s` in `profiles/carc`.
 
 - **Outputs go to `data/jezero/splat/sun0/`**, inside the clone on `/project2`: the checkpoint `splat.pt`, the browser export `splat.ply`, `quality.json` (held-out PSNR and SSIM against the mesh, with the constant-image baseline), and `views/` (about 0.6 GB of float16 renders, cheap to regenerate). All git-ignored.
 - **gsplat must already be built for the L40S** (see "Build gsplat on a CPU node before a GPU job"). The cache holds whichever GPU type built it last; an A100 build makes the first L40S job rebuild it.
 - **New commands need a sync.** This adds `fidelis-splat-views` and `fidelis-splat-train` to `[project.scripts]`, so run `uv sync` (or check with `uv sync --dry-run`) after pulling, or the job fails with "command not found".
-- **Cost (reserved, upper bounds):** `splat_views` 1 GPU, 4 CPUs, 16 GB for 60 min: 960 SUs. `splat_train` 1 GPU, 8 CPUs, 64 GB for 240 min: 7,680 SUs. `plain_mc_splat` as `plain_mc`, 960 SUs. The 240 min training limit is a guess; nobody has timed 30,000 steps on 8 million Gaussians yet. The training log prints the elapsed time every 500 steps, so the first run sets it.
+- **Cost (reserved, upper bounds):** `splat_views` 1 GPU, 4 CPUs, 16 GB for 60 min: 960 SUs. `splat_train` 1 GPU, 8 CPUs, 64 GB for 240 min: 7,680 SUs. `plain_mc_splat` and `plain_mc_mesh_pinned` as `plain_mc`, 960 SUs each. The 240 min training limit is a guess; nobody has timed 30,000 steps on about 8 million Gaussians yet (computed: the scene starts with one per mesh vertex, 6,275,025 in the tile and 1,709,126 in the ring per `data/jezero/mesh/mesh.json`, before densification adds or prunes any). The training log prints the elapsed time every 500 steps, so the first run sets it.
 - **Not yet run.**
 
 ```bash
 cd /project2/irahbari_1147/ckuizon/fidelis
 git pull
 uv sync --dry-run
-uv run --no-sync snakemake --profile profiles/carc splat plain_mc_splat -n
-uv run --no-sync snakemake --profile profiles/carc splat plain_mc_splat
+uv run --no-sync snakemake --profile profiles/carc splat plain_mc_splat plain_mc_mesh_pinned -n
+uv run --no-sync snakemake --profile profiles/carc splat plain_mc_splat plain_mc_mesh_pinned
 ```
 
 The training log is `.snakemake/slurm_logs/rule_splat_train/<jobid>.log`; its last line gives the held-out worst PSNR and SSIM, the constant image's, and whether the gate passed. The training job succeeds even when the gate fails, so its checkpoint survives to be inspected (Snakemake deletes a failed job's outputs). Then the seam-1 tests on the trained splat, on an L40S:

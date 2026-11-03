@@ -118,6 +118,23 @@ def test_the_report_carries_the_constant_image_baseline_beside_the_splat():
     assert baseline["worst"]["psnr_db"] < report["worst"]["psnr_db"]
 
 
+def test_a_gate_a_constant_image_could_pass_proves_nothing_so_the_report_fails():
+    # The null-case test: on low-contrast terrain a constant image's PSNR, 20 log10(peak / sd),
+    # can clear the bar by itself. A pass then says nothing about the splat.
+    mesh = [texture(seed=s) for s in range(3)]
+    lax = QualityGate(psnr_db_min=5.0, ssim_min=-1.0)
+    report = quality_report(mesh, mesh, lax)
+    assert report["constant_baseline"]["rejected"] is False
+    assert not report["passed"]
+
+
+def test_a_gate_that_rejects_every_constant_view_lets_a_good_splat_pass():
+    mesh = [texture(seed=s) for s in range(3)]
+    report = quality_report(mesh, mesh, GATE)
+    assert report["constant_baseline"]["rejected"] is True
+    assert report["passed"]
+
+
 @pytest.mark.parametrize("view", [{"psnr_db": 45.0, "ssim": 0.5}, {"psnr_db": 20.0, "ssim": 0.99}])
 def test_a_view_must_reach_both_bars_not_just_one(view):
     # PSNR forgives blur that SSIM catches, and SSIM forgives a brightness offset PSNR catches.

@@ -151,10 +151,10 @@ def build_simulator(
     renderers = {}
     for fidelity in fidelities:
         if fidelity == "mesh":
-            from fidelis.render.mesh_render import MeshRenderer, Sun
+            from fidelis.render.mesh_render import MeshRenderer, config_suns
 
             if suns is None:
-                suns = [Sun(s["azimuth_deg"], s["elevation_deg"]) for s in scene["suns"]]
+                suns = config_suns(scene)
             renderers["mesh"] = MeshRenderer(data_dir / "mesh", suns, spp=scene["simulation"]["mesh_spp"])
         elif fidelity == "splat":
             from fidelis.render.splat_render import SplatRenderer

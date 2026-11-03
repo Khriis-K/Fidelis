@@ -96,6 +96,26 @@ def test_splat_renders_match_mesh_renders_at_descent_poses_it_never_trained_on(s
     assert report["passed"], report
 
 
+def test_the_splat_costs_less_per_sample_than_the_mesh(simulator):
+    # Seam 1: per-sample cost increases with fidelity level, and the splat is the cheaper
+    # one. Medians over a few samples, after one warm-up each (the first render in a process
+    # pays one-off GPU setup, docs/benchmarks/plain-mc.md).
+    def median_cost(fidelity):
+        simulator.run(scenario(seed=100), fidelity)
+        return float(np.median([simulator.run(scenario(seed=101 + i), fidelity).record.cost_s for i in range(5)]))
+
+    assert median_cost("splat") < median_cost("mesh")
+
+
+def test_a_view_of_empty_sky_gives_a_valid_failure_record(simulator):
+    # Tilted 120 deg the camera looks up, past every Gaussian: nothing to match.
+    record = simulator.run(scenario(tilt_deg=120.0), "splat").record
+    assert record.status != "ok"
+    assert record.estimated_position is None and record.error_m is None
+    assert record.inlier_count == 0
+    assert SimulationRecord(**json.loads(json.dumps(asdict(record)))) == record
+
+
 def test_a_sun_with_no_splat_is_a_caller_error_not_a_crash_mid_batch(simulator):
     missing = next(i for i in range(len(SCENE["suns"])) if i not in simulator.renderers["splat"].suns)
     with pytest.raises(ValueError, match="sun"):

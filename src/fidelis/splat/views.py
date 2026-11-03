@@ -23,11 +23,9 @@ import numpy as np
 import yaml
 
 from fidelis.render.camera import CameraPose, Intrinsics
-from fidelis.scenario import ScenarioConfig, draw, load_config
+from fidelis.scenario import MC_SEED_LIMIT, ScenarioConfig, draw, load_config
 from fidelis.terrain.fetch import sha256_of
 
-# Monte Carlo seeds stay below this; view seeds start at it.
-MC_SEED_LIMIT = 1_000_000_000
 SPLIT_SEEDS = {"train": MC_SEED_LIMIT, "heldout": MC_SEED_LIMIT + 100_000_000}
 
 
@@ -107,7 +105,7 @@ def main() -> int:
     args = parser.parse_args()
 
     from fidelis.nav.orbital_map import load_orbital_map
-    from fidelis.render.mesh_render import MeshRenderer, Sun
+    from fidelis.render.mesh_render import MeshRenderer, config_suns
     from fidelis.simulation import LCAM_PX
 
     scene = yaml.safe_load(args.config.read_text(encoding="utf-8"))
@@ -116,8 +114,7 @@ def main() -> int:
     ground = load_orbital_map(
         data / "matching_map" / "map.tif", data / "scene" / "dtm.tif", data / "mesh" / "mesh.json"
     )
-    suns = [Sun(s["azimuth_deg"], s["elevation_deg"]) for s in scene["suns"]]
-    renderer = MeshRenderer(data / "mesh", suns, spp=settings["spp"])
+    renderer = MeshRenderer(data / "mesh", config_suns(scene), spp=settings["spp"])
     intrinsics = Intrinsics.from_fov(LCAM_PX, LCAM_PX, scene["scenario"]["camera_fov_deg"])
     config = load_config(args.config)
 

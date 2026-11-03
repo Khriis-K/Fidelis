@@ -33,6 +33,19 @@ def test_monte_carlo_on_the_splat_pins_the_trained_sun():
     assert re.search(r"fidelis-plain-mc .* --fidelity splat --sun-index 0\b", output)
 
 
+def test_a_mesh_run_under_the_same_pinned_sun_is_planned_beside_it():
+    # Mesh vs splat compares fidelity only if both draw the same suns: plain_mc mixes all five.
+    output = dry_run("local", "plain_mc_mesh_pinned", "--forceall")
+
+    assert re.search(r"fidelis-plain-mc .* results/plain_mc_mesh_pinned --fidelity mesh --sun-index 0\b", output)
+
+
+def test_carc_pins_the_gpu_model_for_the_pinned_mesh_run_since_its_costs_are_compared():
+    jobs = planned_jobs(dry_run("carc", "plain_mc_mesh_pinned", "--forceall"))
+
+    assert jobs["plain_mc_mesh_pinned"].get("gpu_model") in CARC_GPU_TYPES
+
+
 def rule_block(name: str) -> str:
     snakefile = (REPO / "workflow/Snakefile").read_text()
     block = re.search(rf"^rule {name}:\n((?:[ \t]+.*\n|\n)+?)(?=^\S)", snakefile + "\nEND\n", re.MULTILINE)

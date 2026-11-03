@@ -195,8 +195,8 @@ splat:
   # the camera's full scale (src/fidelis/splat/metrics.py). 30 dB is an RMS error of 3.2%
   # of full scale: 4-16x the camera noise the sampler draws (0.2-0.8%), so this asks for a
   # close approximation, not an indistinguishable one. Whether that's close enough is what
-  # plain Monte Carlo on mesh vs splat answers. A constant image must fail it: quality.json
-  # reports that baseline beside the splat.
+  # plain Monte Carlo on mesh vs splat (both pinned to this sun) answers. A constant image
+  # must fail it in every view, or the gate fails too: quality.json reports that baseline.
   quality: {psnr_db_min: 30, ssim_min: 0.9}
 
 # The first end-to-end estimate (src/fidelis/plain_mc.py): `snakemake plain_mc`.
