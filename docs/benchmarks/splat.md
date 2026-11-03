@@ -42,9 +42,9 @@ Paired over the 20 seeds (computed from the two `records.jsonl`):
 
 ## Seam 1 on the splat
 
-`tests/test_simulation_splat.py` on an L40S (job 13682689, 10.6 s): 6 of 7 passed. Perfect conditions under the trained sun, a tilted/turned/noisy descent, repeatability of the camera image, held-out-style quality at Monte Carlo poses, splat cheaper than mesh per sample, and a sun with no splat as a caller error.
+`tests/test_simulation_splat.py` on an L40S: **7 of 7 pass** (job 13682975, 10.96 s, from `8e2070c`). The first run (job 13682689, 10.6 s, from `2313be8`) passed 6 of 7: Perfect conditions under the trained sun, a tilted/turned/noisy descent, repeatability of the camera image, held-out-style quality at Monte Carlo poses, splat cheaper than mesh per sample, and a sun with no splat as a caller error.
 
-The seventh, the failure-record test, was wrong as written: it tilted the camera 120° to see empty sky, and a view that reaches the horizon has no nadir image, which the navigator refuses on purpose with an error (the sampler's 18° cap never gets there). It now puts the camera 500 m under the ground looking down, so every Gaussian is behind it and the image is black (checked on a toy splat: exactly 0). **Rerun pending.**
+The seventh, the failure-record test, was wrong as written: it tilted the camera 120° to see empty sky, and a view that reaches the horizon has no nadir image, which the navigator refuses on purpose with an error (the sampler's 18° cap never gets there). It now puts the camera 500 m under the ground looking down, so every Gaussian is behind it and the image is black (checked on a toy splat: exactly 0). It passed on the rerun.
 
 ## What this does and doesn't show
 

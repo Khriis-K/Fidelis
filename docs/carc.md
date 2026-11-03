@@ -257,6 +257,8 @@ uv run --no-sync snakemake --profile profiles/carc splat plain_mc_splat plain_mc
 
 The first line lists what would be cleared. The last should plan only `preflight` (and `plain_mc`, if its results are older than the scene rebuilt on 2026-11-02). It only deletes Snakemake's bookkeeping in `.snakemake/metadata`, never data. Checked on the laptop's copy of the workflow (2026-11-02): before it, a dry run planned the whole scene again; after it, only a `plain_mc` whose results really did predate the scene.
 
+**After the migration, a config change can't rerun those outputs on its own.** With their records cleared, Snakemake has nothing to compare new params with: the dry run on CARC (2026-11-02) planned only `preflight` and reported "12 jobs have missing provenance/metadata so that it in part cannot be used to trigger re-runs" (`download_mosaic`, the four scene rules, `splat_views`, `splat_train`, `plain_mc_splat`, `plain_mc_mesh_pinned`). Until a rule's outputs are rebuilt, and so recorded afresh, changing a value it reads needs `--forcerun <rule>`.
+
 To rerun one step on purpose: `--forcerun <rule>`.
 
 ## Running the Snakemake controller
