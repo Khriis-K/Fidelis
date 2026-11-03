@@ -87,6 +87,16 @@ def write_ply(path: Path, positions: np.ndarray, uvs: np.ndarray, faces: np.ndar
     tmp.replace(path)
 
 
+def read_ply_vertices(path: Path) -> tuple[np.ndarray, np.ndarray]:
+    """Vertex positions and UVs from a PLY that write_ply wrote."""
+    data = Path(path).read_bytes()
+    end = data.index(b"end_header\n") + len(b"end_header\n")
+    header = data[:end].decode("ascii").splitlines()
+    count = int(next(line.split()[2] for line in header if line.startswith("element vertex")))
+    vertex = np.frombuffer(data, dtype=[("p", "<f4", 3), ("uv", "<f4", 2)], count=count, offset=end)
+    return vertex["p"].copy(), vertex["uv"].copy()
+
+
 def build_terrain_mesh(
     dtm_path: Path, ortho_path: Path, out_dir: Path, east_scale: float, curvature_radius_m: float | None = None
 ) -> dict:

@@ -16,7 +16,7 @@ Pure Python and NumPy; no GPU.
 
 import math
 import zlib
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from statistics import NormalDist
 
@@ -160,6 +160,17 @@ def draw(config: ScenarioConfig, seed: int) -> Scenario:
         rng = np.random.default_rng([seed, zlib.crc32(name.encode())])
         values[name] = getattr(config, name).sample(rng)
     return Scenario(seed=seed, **values)
+
+
+def pin_sun(config: ScenarioConfig, sun_index: int) -> ScenarioConfig:
+    """The same config with every draw under one sun, for runs while only some suns have a scene.
+
+    Each input has its own random stream, so a seed's other inputs don't change.
+    """
+    low, high = config.sun_index.bounds()
+    if not low <= sun_index <= high:
+        raise ValueError(f"sun {sun_index} is outside the config's sun_index range [{low}, {high}]")
+    return replace(config, sun_index=Integers(sun_index, sun_index))
 
 
 def max_ground_reach_m(altitude_m: float, tilt_deg: float, fov_deg: float) -> float:

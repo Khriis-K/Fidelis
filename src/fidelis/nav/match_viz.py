@@ -71,13 +71,17 @@ def main() -> int:
     parser.add_argument("seed", type=int)
     parser.add_argument("out", type=Path, help="a .png")
     parser.add_argument("--fidelity", default="mesh")
+    parser.add_argument("--sun-index", type=int, help="pin the sun, as the run being pictured did")
     args = parser.parse_args()
 
-    from fidelis.scenario import draw, load_config
-    from fidelis.simulation import build_mesh_simulator
+    from fidelis.scenario import draw, load_config, pin_sun
+    from fidelis.simulation import build_simulator
 
-    simulator = build_mesh_simulator(args.config, args.data_dir)
-    run = simulator.run(draw(load_config(args.config), args.seed), args.fidelity)
+    config = load_config(args.config)
+    if args.sun_index is not None:
+        config = pin_sun(config, args.sun_index)
+    simulator = build_simulator(args.config, args.data_dir, (args.fidelity,))
+    run = simulator.run(draw(config, args.seed), args.fidelity)
     record, nav = run.record, run.nav
     error = "no fix" if record.error_m is None else f"error {record.error_m:.1f} m"
     caption = (

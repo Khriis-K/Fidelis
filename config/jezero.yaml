@@ -176,6 +176,29 @@ simulation:
   # isn't known: that is a fraction of full scale, this a fraction of the median pixel.
   mesh_spp: 256
 
+# The splat scene (src/fidelis/splat/): `snakemake splat`, then `snakemake plain_mc_splat`.
+splat:
+  # The one sun trained so far (#9): the landing-day sun. #20 trains all five. Until then
+  # Monte Carlo on the splat pins every descent to this sun (--sun-index).
+  sun_index: 0
+  # Training and held-out views are scenario draws on seeds of their own
+  # (src/fidelis/splat/views.py). 300 views of a ~4.6 km square footprint (nadir, 2.3 km up)
+  # over the ~100 km^2 tile average about 60 views per tile point, more near the centre where
+  # the offsets cluster (computed, not measured). spp as the
+  # simulator's mesh_spp, so the targets are as clean as what the mesh fidelity renders.
+  views: {train: 300, heldout: 20, spp: 256}
+  # gsplat simple_trainer's defaults (src/fidelis/splat/train.py).
+  steps: 30000
+  ssim_weight: 0.2
+  log_every: 500
+  # PROVISIONAL, a Fidelis choice: every held-out view must reach both, measured against
+  # the camera's full scale (src/fidelis/splat/metrics.py). 30 dB is an RMS error of 3.2%
+  # of full scale: 4-16x the camera noise the sampler draws (0.2-0.8%), so this asks for a
+  # close approximation, not an indistinguishable one. Whether that's close enough is what
+  # plain Monte Carlo on mesh vs splat answers. A constant image must fail it: quality.json
+  # reports that baseline beside the splat.
+  quality: {psnr_db_min: 30, ssim_min: 0.9}
+
 # The first end-to-end estimate (src/fidelis/plain_mc.py): `snakemake plain_mc`.
 plain_mc:
   samples: 20

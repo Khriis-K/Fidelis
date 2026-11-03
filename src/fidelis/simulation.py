@@ -6,8 +6,9 @@ it at that fidelity under the scenario's sun, turns the render into a camera ima
 navigation error, the navigator's diagnostics, the wall-clock cost and the GPU it ran on;
 everything else about the descent comes back from the seed.
 
-Fidelity levels are renderers, by name: `"mesh"` (path-traced mesh) for now, with splat
-levels to come behind the same interface. A renderer is any callable
+Fidelity levels are renderers, by name: `"mesh"` (path-traced mesh) and `"splat"` (a
+Gaussian splat scene trained from mesh renders, one per sun), with cheaper splat levels to
+come behind the same interface. A renderer is any callable
 `(pose, intrinsics, sun_index, seed) -> radiance image`. One that loads a scene per sun
 may also have `use_sun(sun_index)`, which `run` calls before the clock starts, so the
 recorded cost is the per-sample price and not a scene load.
@@ -136,21 +137,40 @@ class Simulator:
         return Run(record, image, nav)
 
 
-def build_mesh_simulator(config_path: Path, data_dir: Path, suns=None, device: str = "cuda") -> Simulator:
-    """The Jezero mesh at fidelity "mesh", the CTX-like map, and LCAM, from the scene config and workflow data.
+def build_simulator(
+    config_path: Path, data_dir: Path, fidelities=("mesh",), suns=None, device: str = "cuda"
+) -> Simulator:
+    """Jezero at the asked fidelities, the CTX-like map, and LCAM, from the scene config and workflow data.
 
-    `suns` overrides the config's sun angles (a test's zenith sun, say).
+    "mesh" path-traces the mesh under any of the config's suns; `suns` overrides them (a
+    test's zenith sun, say). "splat" renders the splat scene of each sun that has one in
+    data_dir/splat/sun<i>/ (`snakemake splat`).
     """
-    from fidelis.render.mesh_render import MeshRenderer, Sun
-
     scene = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
     data_dir = Path(data_dir)
-    if suns is None:
-        suns = [Sun(s["azimuth_deg"], s["elevation_deg"]) for s in scene["suns"]]
+    renderers = {}
+    for fidelity in fidelities:
+        if fidelity == "mesh":
+            from fidelis.render.mesh_render import MeshRenderer, Sun
+
+            if suns is None:
+                suns = [Sun(s["azimuth_deg"], s["elevation_deg"]) for s in scene["suns"]]
+            renderers["mesh"] = MeshRenderer(data_dir / "mesh", suns, spp=scene["simulation"]["mesh_spp"])
+        elif fidelity == "splat":
+            from fidelis.render.splat_render import SplatRenderer
+
+            checkpoints = {i: data_dir / "splat" / f"sun{i}" / "splat.pt" for i in range(len(scene["suns"]))}
+            renderers["splat"] = SplatRenderer({i: p for i, p in checkpoints.items() if p.exists()}, device=device)
+        else:
+            raise ValueError(f"unknown fidelity {fidelity!r}; expected 'mesh' or 'splat'")
     orbital_map = load_orbital_map(
         data_dir / "matching_map" / "map.tif", data_dir / "scene" / "dtm.tif", data_dir / "mesh" / "mesh.json"
     )
-    renderer = MeshRenderer(data_dir / "mesh", suns, spp=scene["simulation"]["mesh_spp"])
     intrinsics = Intrinsics.from_fov(LCAM_PX, LCAM_PX, scene["scenario"]["camera_fov_deg"])
     navigator = Navigator(orbital_map, device=device)
-    return Simulator({"mesh": renderer}, navigator, intrinsics, config_sha256=sha256_of(config_path))
+    return Simulator(renderers, navigator, intrinsics, config_sha256=sha256_of(config_path))
+
+
+def build_mesh_simulator(config_path: Path, data_dir: Path, suns=None, device: str = "cuda") -> Simulator:
+    """`build_simulator` at fidelity "mesh" alone."""
+    return build_simulator(config_path, data_dir, ("mesh",), suns=suns, device=device)

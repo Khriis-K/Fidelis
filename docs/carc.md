@@ -218,6 +218,30 @@ uv run --no-sync snakemake --profile profiles/carc plain_mc
 
 If `git pull` changed `uv.lock` or `pyproject.toml`, run `uv sync` first ("uv environment on CARC"). The dry run (`-n`) should list `plain_mc` plus whatever scene steps are missing, every job with `slurm_account=irahbari_1147`. The estimate prints at the end of `.snakemake/slurm_logs/rule_plain_mc/<jobid>.log`; the results are `results/plain_mc/records.jsonl` and `estimate.json`.
 
+## Splat scene on CARC (#9)
+
+`snakemake splat` renders the training views (`splat_views`) and trains one splat scene under the config's `splat.sun_index` (`splat_train`); `snakemake plain_mc_splat` then runs plain Monte Carlo on it. All three are pinned to `l40s` in `profiles/carc`.
+
+- **Outputs go to `data/jezero/splat/sun0/`**, inside the clone on `/project2`: the checkpoint `splat.pt`, the browser export `splat.ply`, `quality.json` (held-out PSNR and SSIM against the mesh, with the constant-image baseline), and `views/` (about 0.6 GB of float16 renders, cheap to regenerate). All git-ignored.
+- **gsplat must already be built for the L40S** (see "Build gsplat on a CPU node before a GPU job"). The cache holds whichever GPU type built it last; an A100 build makes the first L40S job rebuild it.
+- **New commands need a sync.** This adds `fidelis-splat-views` and `fidelis-splat-train` to `[project.scripts]`, so run `uv sync` (or check with `uv sync --dry-run`) after pulling, or the job fails with "command not found".
+- **Cost (reserved, upper bounds):** `splat_views` 1 GPU, 4 CPUs, 16 GB for 60 min: 960 SUs. `splat_train` 1 GPU, 8 CPUs, 64 GB for 240 min: 7,680 SUs. `plain_mc_splat` as `plain_mc`, 960 SUs. The 240 min training limit is a guess; nobody has timed 30,000 steps on 8 million Gaussians yet. The training log prints the elapsed time every 500 steps, so the first run sets it.
+- **Not yet run.**
+
+```bash
+cd /project2/irahbari_1147/ckuizon/fidelis
+git pull
+uv sync --dry-run
+uv run --no-sync snakemake --profile profiles/carc splat plain_mc_splat -n
+uv run --no-sync snakemake --profile profiles/carc splat plain_mc_splat
+```
+
+The training log is `.snakemake/slurm_logs/rule_splat_train/<jobid>.log`; its last line gives the held-out worst PSNR and SSIM, the constant image's, and whether the gate passed. The training job succeeds even when the gate fails, so its checkpoint survives to be inspected (Snakemake deletes a failed job's outputs). Then the seam-1 tests on the trained splat, on an L40S:
+
+```bash
+srun --account=irahbari_1147 --partition=gpu --gres=gpu:l40s:1 -c 4 --mem 32G -t 30 bash -c "module purge && module load ver/2607 gcc/15.3.0 cuda/13.0.3 && uv run --no-sync pytest -m gpu tests/test_simulation_splat.py -v"
+```
+
 ## Running the Snakemake controller
 
 The Snakemake controller process has to stay alive for the whole workflow. It's light, but it runs for a long time. Options:

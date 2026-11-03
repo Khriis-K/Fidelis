@@ -171,6 +171,82 @@ rule plain_mc:
         f"fidelis-plain-mc config/jezero.yaml {JEZERO} results/plain_mc"
 
 
+# The splat scene (#9): mesh renders from descent-camera views under one sun, then a
+# gsplat scene trained on them and checked against held-out views. `snakemake splat`.
+# Outputs live under data/, which on CARC is the clone on /project2 (docs/carc.md).
+SPLAT = f"{JEZERO}/splat/sun{{sun}}"
+SPLAT_SUN = config["splat"]["sun_index"]
+
+
+rule splat:
+    input:
+        expand(f"{SPLAT}/splat.pt", sun=SPLAT_SUN),
+        expand(f"{SPLAT}/quality.json", sun=SPLAT_SUN),
+
+
+rule splat_views:
+    input:
+        rules.jezero.input,
+        "config/jezero.yaml",
+    output:
+        f"{SPLAT}/views/train.npy",
+        f"{SPLAT}/views/heldout.npy",
+        f"{SPLAT}/views/views.json",
+    wildcard_constraints:
+        sun=r"\d+",
+    resources:
+        gpu=1,
+        cpus_per_task=4,
+        mem_mb=16000,
+        runtime=60,
+    shell:
+        f"fidelis-splat-views config/jezero.yaml {JEZERO} {JEZERO}/splat/sun{{wildcards.sun}}/views"
+        " --sun-index {wildcards.sun}"
+
+
+rule splat_train:
+    input:
+        rules.splat_views.output,
+        f"{JEZERO}/mesh/mesh.json",
+        "config/jezero.yaml",
+    output:
+        f"{SPLAT}/splat.pt",
+        f"{SPLAT}/splat.ply",
+        f"{SPLAT}/quality.json",
+    wildcard_constraints:
+        sun=r"\d+",
+    resources:
+        gpu=1,
+        cpus_per_task=8,
+        mem_mb=64000,
+        runtime=240,  # minutes; a guess for 30k steps until the first run's log says
+    envmodules:
+        *CUDA_MODULES,
+    shell:
+        f"fidelis-splat-train config/jezero.yaml {JEZERO}/splat/sun{{wildcards.sun}}/views {JEZERO}/mesh"
+        f" {JEZERO}/splat/sun{{wildcards.sun}}"
+
+
+# Plain Monte Carlo on the splat, every descent under the trained sun. `snakemake plain_mc_splat`.
+rule plain_mc_splat:
+    input:
+        rules.jezero.input,
+        rules.splat.input,
+        "config/jezero.yaml",
+    output:
+        "results/plain_mc_splat/records.jsonl",
+        "results/plain_mc_splat/estimate.json",
+    resources:
+        gpu=1,
+        cpus_per_task=4,
+        mem_mb=16000,
+        runtime=60,
+    envmodules:
+        *CUDA_MODULES,
+    shell:
+        f"fidelis-plain-mc config/jezero.yaml {JEZERO} results/plain_mc_splat --fidelity splat --sun-index {SPLAT_SUN}"
+
+
 # The match picture for any seed, rerun from the config:
 # `snakemake results/plain_mc/matches/seed_12.png`.
 rule match_viz:

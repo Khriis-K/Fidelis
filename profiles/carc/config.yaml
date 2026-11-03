@@ -18,6 +18,10 @@ set-resources:
   # Their records carry per-sample cost, which means nothing across mixed GPU models.
   - plain_mc:gpu_model=l40s
   - match_viz:gpu_model=l40s
+  - plain_mc_splat:gpu_model=l40s
+  # Not timed, but gsplat's one build cache is per GPU type: run one type at a time (docs/carc.md).
+  - splat_views:gpu_model=l40s
+  - splat_train:gpu_model=l40s
   # CPU-only data prep goes to `main`, off the gpu partition and its 100-job queue cap.
   # (download_mosaic is a localrule: compute nodes have no internet.)
   - jezero_tile:slurm_partition=main

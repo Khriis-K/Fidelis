@@ -25,8 +25,9 @@ from statistics import NormalDist, median
 
 import yaml
 
-from fidelis.scenario import ScenarioConfig, draw, load_config
+from fidelis.scenario import ScenarioConfig, draw, load_config, pin_sun
 from fidelis.simulation import SimulationRecord
+from fidelis.splat.views import MC_SEED_LIMIT
 from fidelis.terrain.fetch import sha256_of
 
 
@@ -98,22 +99,32 @@ def main() -> int:
     parser.add_argument("--samples", type=int, help="default: the config's plain_mc.samples")
     parser.add_argument("--first-seed", type=int, default=0)
     parser.add_argument("--fidelity", default="mesh")
+    parser.add_argument(
+        "--sun-index", type=int, help="draw every descent under this sun (while only some suns have a splat scene)"
+    )
     args = parser.parse_args()
 
-    from fidelis.simulation import build_mesh_simulator
+    from fidelis.simulation import build_simulator
 
     scene = yaml.safe_load(args.config.read_text(encoding="utf-8"))
     settings = scene["plain_mc"]
     n = args.samples or settings["samples"]
     seeds = range(args.first_seed, args.first_seed + n)
-    simulator = build_mesh_simulator(args.config, args.data_dir)
-    records = run_samples(simulator, load_config(args.config), seeds, args.fidelity)
+    if seeds.stop > MC_SEED_LIMIT:
+        raise ValueError(f"Monte Carlo seeds must stay below {MC_SEED_LIMIT}: splat training views use those above")
+    config = load_config(args.config)
+    if args.sun_index is not None:
+        config = pin_sun(config, args.sun_index)
+    simulator = build_simulator(args.config, args.data_dir, (args.fidelity,))
+    records = run_samples(simulator, config, seeds, args.fidelity)
     write_records(records, args.out_dir / "records.jsonl")
 
     est = estimate(records, settings["provisional_r_m"], r_provisional=True)
     out = asdict(est) | {
         "fidelity": args.fidelity,
         "seeds": [seeds.start, seeds.stop - 1],
+        # None: each seed drew its own sun. Reruns of a pinned run need the same --sun-index.
+        "sun_index_pinned": args.sun_index,
         "gpu": sorted({r.gpu for r in records}),
         "median_cost_s": median(r.cost_s for r in records),
         # Reruns need the same config: its hash says whether a later one still is.
