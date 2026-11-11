@@ -78,6 +78,7 @@ To pick an A100 size, add `--constraint=a100-40gb` or `--constraint=a100-80gb`. 
 
 - V100 has no bf16 support, so mixed precision there means fp16 with a GradScaler. [Places]
 - **Open:** which GPU type to standardize on. L40S has by far the highest FP32 rate per SU of anything listed, which suits splat rendering. We won't know until we benchmark real Fidelis renders on it, though. Both L40S and A100 pass the smoke test (see "GPU types that passed"), so either is a working fallback.
+- **L40S availability is an input to that choice.** The evening of 2026-11-10, `squeue -p gpu` listed 78 pending L40S jobs (65 on Priority, 13 on dependencies) and 7 running, using 9 L40S GPUs on nodes b17-16, b18-16, b18-17 and b18-18. A 30-minute single-L40S job of ours (14002051) sat pending on Priority behind them. One snapshot, not a wait-time measurement; the user reports L40S waits have been long lately.
 
 ## Storage [CARC]
 
@@ -178,7 +179,9 @@ This doesn't pin the A100 memory size (40 or 80 GB). The smoke test isn't timed,
 | `l40s` | 2026-11-01 | 580.159.04 | 5/5 pass (c04-02, 38 s) | job 13649053, `.snakemake/slurm_logs/rule_smoke/13649053.log` |
 | `a100` | 2026-11-01 | 580.159.04 | 5/5 pass (b02-20, A100-PCIE-40GB, 4 min 23 s including the gsplat rebuild) | job 13652238, `.snakemake/slurm_logs/rule_smoke/13652238.log` |
 
-Not run: `a40` (debug and gpu partitions; would be a third architecture, sm_86). `v100` and `p100` can't run this stack: CUDA 13 dropped Pascal and Volta (sm_60–sm_70), so torch `cu134` has no kernels for them (NVIDIA CUDA 13.0 release notes; not tried on CARC).
+`a40`: not smoke-tested, but the per-stage descent profile ran on one (debug partition, 2026-11-10). gsplat built for sm_86 in 145 s and rendered; 30 descents all located (docs/benchmarks/descent-profile.md). It built into its own cache by setting `TORCH_EXTENSIONS_DIR=$HOME/.cache/torch_extensions_a40`: torch's `_get_build_directory` reads that variable and gsplat builds through it (`gsplat/cuda/build.py`). A separate cache per GPU type avoids the race and the rebuild back and forth described above. Not yet checked: that the shared L40S cache was left untouched.
+
+`v100` and `p100` can't run this stack: CUDA 13 dropped Pascal and Volta (sm_60–sm_70), so torch `cu134` has no kernels for them (NVIDIA CUDA 13.0 release notes; not tried on CARC).
 
 ### CARC-specific workarounds
 
