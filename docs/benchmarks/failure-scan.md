@@ -4,7 +4,7 @@ The fidelity sweep (`docs/benchmarks/fidelity-sweep.md`) saw 0 failures in 300 d
 
 ## Plan
 
-**Status: pre-registered 2026-11-11, not yet run.** Nothing below is a measurement.
+**Status: pre-registered 2026-11-11, before the run.** Nothing in this section is a measurement; the results are under "Results".
 
 ### What runs
 
@@ -37,4 +37,32 @@ The fidelity sweep (`docs/benchmarks/fidelity-sweep.md`) saw 0 failures in 300 d
 
 ## Results
 
-Not yet run.
+**Run on 2026-11-11.** One debug job on one NVIDIA A40, with the command from the plan (job ID not recorded). All 300 seeds ran. Every record carries config SHA-256 `05bbc8fb…`, which matches the committed `config/jezero.yaml`. This was the mesh renderer's first A40 run, and it ran without errors. Median cost was 0.479 s per descent (max 0.785 s). No departures from the plan.
+
+### Headline
+
+**0 failures in 300 at r = 12 m. P(fail) = 0, 95% Wilson interval [0, 0.0126].** Every descent got a fix, and the fewest inliers in any descent was 1,187.
+
+### By sun (planned)
+
+| Sun | Az, el | Descents | Failures | Median error | 90th pct | Max |
+|---|---|---|---|---|---|---|
+| 0 | 257°, 40° | 61 | 0 | 2.30 m | 2.87 m | 3.47 m |
+| 1 | 240°, 25° | 58 | 0 | 4.39 m | 5.26 m | 5.59 m |
+| 2 | 240°, 55° | 68 | 0 | 1.57 m | 2.28 m | 2.68 m |
+| 3 | 310°, 25° | 61 | 0 | 4.84 m | 5.69 m | 6.70 m |
+| 4 | 310°, 55° | 52 | 0 | 1.99 m | 2.61 m | 3.05 m |
+
+The low suns roughly double the error, as the 20-descent run suggested. Even so, the worst descent of all 300 (seed 10045, sun 3) was 6.70 m off, just over half of r.
+
+### Exploratory (not planned; labelled as such)
+
+- **The sun sets a fixed offset, and the scatter around it is small.** Averaging each sun's error vectors gives an offset of 1.5–4.7 m, depending on the sun. Around that average, descents scatter by only 0.8–1.3 m RMS (rms distance from the mean vector). So the low-sun error is mostly a consistent bias, not a few descents going wrong.
+- **The bias points roughly away from the sun, the way shadows fall.** Bearings of the mean offset (east, north): sun 1 (azimuth 240°) gives 54°, against 60° directly away from the sun; sun 3 (310°) gives 155°, against 130°; sun 2 (240°) gives 56°. A plausible cause is shadow edges shifting matched features. That's an inference from the directions; no test isolates it.
+- **Nothing else matters much.** Spearman rank correlation of error with each other drawn input: altitude 0.12, exposure gain −0.09, noise −0.07, blur 0.05, tilt 0.02.
+- **The worst eight descents are all sun 3** (5.66–6.70 m). They span the full drawn range of tilt (0.1–17.4°) and exposure gain (0.50–1.44), so they don't point to a second cause.
+- **Map keypoints are 70,749 in every record**, as in the sweep, against 70,726 in `descent-profile.md`. Still not investigated.
+
+### What it means
+
+The plan's "0 failures" branch applies: under the current scenario model, even at its lowest 25° sun, the real navigator doesn't fail. The exploratory result makes this stronger than "we haven't seen one yet". Errors are a per-sun bias plus about 1 m of scatter, and the worst bias (4.7 m) sits about 7 m below r. Reaching 12 m would take scatter several times larger than anything seen here. If the scatter's tails are anything like normal, more descents of this kind won't produce failures (an inference, not a test of the tails). Failures would have to come from a lever that adds a new source of error: IMU attitude error, suns lower than 25°, or wider blur and noise. Which lever, if any, is the user's call. If none is realistic, the honest summary is that the navigator is too reliable to need cheap estimation.
