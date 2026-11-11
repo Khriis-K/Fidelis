@@ -1,6 +1,8 @@
 # First plain Monte Carlo run (issue #8)
 
-The first end-to-end run of the simulation interface: 20 seeded descents through the Jezero mesh renderer, the camera model and the navigator, then P(fail) with a 95% Wilson interval. It shows that the pipeline runs end to end. A second run of the same seeds on the wide scene, with flight-like tilts and offsets, is under "Wide-scene run" below. **Neither is a failure estimate:** r is provisional, N is tiny, and the descents are easier than flight (see Caveats).
+The first end-to-end run of the simulation interface: 20 seeded descents through the Jezero mesh renderer, the camera model and the navigator, then P(fail) with a 95% Wilson interval. It shows that the pipeline runs end to end. A second run of the same seeds on the wide scene, with flight-like tilts and offsets, is under "Wide-scene run" below. **Neither is a failure estimate:** N is tiny and the descents are easier than flight (see Caveats).
+
+**How failure is counted now.** Both runs were scored by the rule of the time: no fix, or a fix more than a provisional r = 12 m from the truth. ADR 0003 replaced it: a descent fails if it gets no fix, or its fix is more than r = 40 m off (LVS's requirement) in the *map frame*, after removing one independently measured whole-map offset between the matching map and the scene. `fidelis-plain-mc` now counts that way, reports no-fix and beyond-r failures separately, and records the offset and its source on every record. For these runs the change makes no difference: the map was made from the scene's own orthoimage, so the offset is zero by construction, and no error came near 12 m, let alone 40 m. Both runs are 0/20 under either rule.
 
     uv run snakemake --profile profiles/local plain_mc
     uv run snakemake --profile profiles/local results/plain_mc/matches/seed_14.png
@@ -9,7 +11,7 @@ Setup: seeds 0–19, config `config/jezero.yaml` (SHA-256 `f764e270…`, recorde
 
 ## Result
 
-**P(fail) = 0/20 at PROVISIONAL r = 12 m, 95% Wilson interval [0, 0.161].** Every descent got a fix.
+**P(fail) = 0/20 at the then-provisional r = 12 m (true frame), 95% Wilson interval [0, 0.161].** Every descent got a fix.
 
 | Seed | Sun (az, el) | Error (m) | Inliers / matches | Cost (s) |
 |---|---|---|---|---|
@@ -45,7 +47,7 @@ The same 20 seeds again, on the wide scene (`wide-scene.md`), with the sampler's
 
 It didn't run on the laptop. The wide matching map gives 70,726 keypoints, against 14,290 on the 10 km tile. On the 8 GB RTX 5070, LightGlue ran out of GPU memory matching a descent image against them (`torch.AcceleratorError: CUDA error: out of memory` in `sigmoid_log_double_softmax`). The L40S's peak GPU memory wasn't recorded, so how much headroom this needs is unknown. Host memory peaked at 2.95 GB (`sacct` MaxRSS).
 
-**P(fail) = 0/20 at PROVISIONAL r = 12 m, 95% Wilson interval [0, 0.161].** Every descent got a fix.
+**P(fail) = 0/20 at the then-provisional r = 12 m (true frame), 95% Wilson interval [0, 0.161].** Every descent got a fix.
 
 | Seed | Sun (az, el) | Tilt (°) | Ring share | Error (m) | Inliers / matches | Cost (s) |
 |---|---|---|---|---|---|---|
@@ -104,7 +106,7 @@ Against r in the tens of metres, the jitter is small. But it makes samples near 
 
 ## Caveats
 
-- **r = 12 m is a placeholder** (two 6 m map pixels), not the pilot study's r. No descent came near it, so P(fail) = 0 says only that these 20 descents all landed within 6.12 m.
+- **These runs used r = 12 m**, a placeholder (two 6 m map pixels) since replaced by ADR 0003's 40 m. No descent came near either, so P(fail) = 0 says only that these 20 descents all landed within 6.12 m.
 - **N = 20.** The Wilson upper bound, 16%, is the honest summary: anything from 0 to about 16% is consistent with this run.
 - **Easier than flight:** tilt capped at 3° and offsets at ±400 m by the tile, true attitude, 2 m-detail renders matched against a map from the same photo, no sky light. Issue #33 has since widened the scene and the sampler (tilt 0–18°, offsets ±2750 m; `wide-scene.md`). The first run (20 seeds on the laptop, at most 3° and ±400 m) predates that; the wide-scene run above uses it, still with the true attitude.
 - The 10 km-tile results: one machine, one GPU, two runs. The wide-scene result: one run, on one L40S.

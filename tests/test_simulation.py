@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 from rasterio.transform import from_origin
 
+from fidelis.map_frame import MapOffset
 from fidelis.nav.navigator import Navigator
 from fidelis.nav.orbital_map import OrbitalMap
 from fidelis.render.camera import CameraPose, Intrinsics
@@ -224,6 +225,29 @@ def test_every_record_names_the_config_it_ran_under(simulator, tmp_path):
     assert digest == hashlib.sha256(config.read_bytes()).hexdigest()
     sim = Simulator(simulator.renderers, simulator.navigator, K, config_sha256=digest)
     assert sim.run(scenario(), "black").record.config_sha256 == digest
+
+
+def test_every_record_carries_the_map_offset_and_its_map_frame_error(simulator):
+    # ADR 0003: the error counted is the fix less the whole-map shift; the true-frame error stays.
+    offset = MapOffset(east_m=30.0, north_m=-20.0, source="test shift")
+    sim = Simulator(simulator.renderers, simulator.navigator, K, map_offset=offset)
+    record = sim.run(scenario(), "flat").record
+    assert (record.map_offset_m, record.map_offset_source) == ([30.0, -20.0], "test shift")
+    np.testing.assert_allclose(record.map_frame_error_vector, np.array(record.error_vector) - [30.0, -20.0, 0.0])
+    assert record.map_frame_error_m == pytest.approx(np.linalg.norm(record.map_frame_error_vector))
+
+
+def test_a_no_fix_record_still_names_its_offset(simulator):
+    offset = MapOffset(east_m=30.0, north_m=-20.0, source="test shift")
+    record = Simulator(simulator.renderers, simulator.navigator, K, map_offset=offset).run(scenario(), "black").record
+    assert (record.map_offset_m, record.map_offset_source) == ([30.0, -20.0], "test shift")
+    assert record.map_frame_error_vector is None and record.map_frame_error_m is None
+
+
+def test_without_an_offset_the_map_frame_error_is_the_true_frame_error(simulator):
+    record = simulator.run(scenario(), "flat").record
+    assert record.map_offset_m == [0.0, 0.0] and record.map_offset_source
+    assert record.map_frame_error_vector == pytest.approx(record.error_vector)
 
 
 def test_an_unknown_fidelity_is_a_caller_error(simulator):

@@ -15,6 +15,10 @@ navigator; the cheaper levels differ only in the navigator. A renderer is any ca
 may also have `use_sun(sun_index)`, which `run` calls before the clock starts, so the
 recorded cost is the per-sample price and not a scene load.
 
+Each record also carries the map-frame error: the error less the whole-map offset between
+the matching map and the scene, read from the scene config (fidelis.map_frame, ADR 0003).
+The true-frame error stays alongside it.
+
 The navigator gets the true attitude: attitude-knowledge (IMU) error isn't modelled
 (issue #34, docs/benchmarks/navigator.md).
 """
@@ -30,6 +34,7 @@ import numpy as np
 import torch
 import yaml
 
+from fidelis.map_frame import MapOffset, load_map_offset, map_frame_error
 from fidelis.nav.navigator import Navigator, NavResult
 from fidelis.nav.orbital_map import load_orbital_map
 from fidelis.render.camera import CameraPose, Intrinsics, look_at
@@ -41,6 +46,9 @@ Renderer = Callable[[CameraPose, Intrinsics, int, int], np.ndarray]
 
 # LCAM: 1024 x 1024 pixels (Maki et al. 2020; docs/camera-conventions.md).
 LCAM_PX = 1024
+
+# For a simulator built without a scene config (tests): the map is the scene's own.
+NO_OFFSET = MapOffset(0.0, 0.0, "none given: simulator built without a scene config")
 
 
 def scenario_pose(scenario: Scenario, ground_z: float) -> CameraPose:
@@ -81,6 +89,13 @@ class SimulationRecord:
     # How many map keypoints the level's navigator matched against: the whole map for a bare
     # renderer name, and K past the map's count is the whole map too. None in older records.
     map_keypoints: int | None = None
+    # The whole-map offset [east, north] removed for the map-frame error, and where it came
+    # from (fidelis.map_frame, ADR 0003). Failure is judged on the map-frame error; None in
+    # records from before ADR 0003, whose map was the scene's own, so the offset was zero.
+    map_offset_m: list[float] | None = None
+    map_offset_source: str | None = None
+    map_frame_error_vector: list[float] | None = None  # error_vector less the offset
+    map_frame_error_m: float | None = None  # its length
 
 
 @dataclass(frozen=True)
@@ -97,11 +112,13 @@ class Simulator:
         navigator: Navigator,
         intrinsics: Intrinsics,
         config_sha256: str | None = None,
+        map_offset: MapOffset = NO_OFFSET,
     ):
         self.renderers = renderers
         self.navigator = navigator
         self.intrinsics = intrinsics
         self.config_sha256 = config_sha256
+        self.map_offset = map_offset
         self._thinned: dict[int, Navigator] = {}
         self.gpu = torch.cuda.get_device_name() if navigator.device.startswith("cuda") else "cpu"
 
@@ -121,10 +138,11 @@ class Simulator:
         nav = navigator.locate(image, self.intrinsics, pose.rotation)
         cost = time.perf_counter() - start
 
-        estimate = error = None
+        estimate = error = in_map = None
         if nav.position is not None:
             estimate = nav.position.tolist()
             error = (nav.position - pose.position).tolist()
+            in_map = map_frame_error(error, self.map_offset)
         inputs = asdict(scenario)
         del inputs["seed"]
         record = SimulationRecord(
@@ -142,6 +160,10 @@ class Simulator:
             scenario=inputs,
             config_sha256=self.config_sha256,
             map_keypoints=len(navigator.map_features["keypoints"][0]),
+            map_offset_m=[self.map_offset.east_m, self.map_offset.north_m],
+            map_offset_source=self.map_offset.source,
+            map_frame_error_vector=in_map,
+            map_frame_error_m=None if in_map is None else float(np.linalg.norm(in_map)),
         )
         return Run(record, image, nav)
 
@@ -167,7 +189,7 @@ def parse_fidelity(fidelity: str) -> tuple[str, int | None]:
 def build_simulator(
     config_path: Path, data_dir: Path, fidelities=("mesh",), suns=None, device: str = "cuda"
 ) -> Simulator:
-    """Jezero at the asked fidelities, the CTX-like map, and LCAM, from the scene config and workflow data.
+    """Jezero at the asked fidelities, the CTX-like map, its offset, and LCAM, from the scene config and workflow data.
 
     "mesh" path-traces the mesh under any of the config's suns; `suns` overrides them (a
     test's zenith sun, say). "splat" renders the splat scene of each sun that has one in
@@ -197,7 +219,9 @@ def build_simulator(
     )
     intrinsics = Intrinsics.from_fov(LCAM_PX, LCAM_PX, scene["scenario"]["camera_fov_deg"])
     navigator = Navigator(orbital_map, device=device)
-    return Simulator(renderers, navigator, intrinsics, config_sha256=sha256_of(config_path))
+    return Simulator(
+        renderers, navigator, intrinsics, config_sha256=sha256_of(config_path), map_offset=load_map_offset(scene)
+    )
 
 
 def build_mesh_simulator(config_path: Path, data_dir: Path, suns=None, device: str = "cuda") -> Simulator:

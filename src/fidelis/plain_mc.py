@@ -1,8 +1,10 @@
 """Plain Monte Carlo: run N seeded descents, count failures, report P(fail) with a confidence interval.
 
 A descent fails if the navigator gives no fix at all, or its fix is more than r from the
-truth. Until the pilot study (#13) sets r, the scene config's r is provisional, and every
-output says so.
+truth in the map frame: after removing the whole-map offset between the matching map and
+the scene (fidelis.map_frame). r is LVS's 40 m requirement, from the scene config, and is
+not tuned to a target failure rate (docs/adr/0003-failure-is-40m-in-the-map-frame.md).
+No-fix and beyond-r failures are counted separately.
 
 The interval is Wilson's score interval: unlike the textbook p +- z sqrt(p(1-p)/n), it
 keeps an upper bound above zero when no failures were seen, and stays inside [0, 1].
@@ -30,8 +32,21 @@ from fidelis.simulation import SimulationRecord
 from fidelis.terrain.fetch import sha256_of
 
 
+def is_no_fix(record: SimulationRecord) -> bool:
+    return record.status != "ok"
+
+
+def is_beyond_r(record: SimulationRecord, r_m: float) -> bool:
+    """A fix more than r off in the map frame. Records from before ADR 0003 have no map-frame
+    error; their map was the scene's own, so the offset was zero and the true-frame error is it."""
+    if is_no_fix(record):
+        return False
+    error = record.error_m if record.map_frame_error_m is None else record.map_frame_error_m
+    return error > r_m
+
+
 def is_failure(record: SimulationRecord, r_m: float) -> bool:
-    return record.status != "ok" or record.error_m > r_m
+    return is_no_fix(record) or is_beyond_r(record, r_m)
 
 
 def wilson_interval(failures: int, n: int, confidence: float) -> tuple[float, float]:
@@ -47,26 +62,55 @@ def wilson_interval(failures: int, n: int, confidence: float) -> tuple[float, fl
 @dataclass(frozen=True)
 class Estimate:
     n: int
-    failures: int
+    failures: int  # no_fix + beyond_r
+    no_fix: int
+    beyond_r: int  # got a fix, but more than r off in the map frame
     p: float
     ci_low: float
     ci_high: float
     confidence: float
     r_m: float
-    r_provisional: bool
+    # The whole-map offset [east, north] the records' map-frame errors removed, and its
+    # source. None for records from before ADR 0003, which didn't record one.
+    map_offset_m: list[float] | None
+    map_offset_source: str | None
 
     def summary(self) -> str:
-        r = f"{'PROVISIONAL ' if self.r_provisional else ''}r = {self.r_m:g} m"
+        if self.map_offset_m is None:
+            offset = "map offset not recorded (records from before ADR 0003, when it was zero)"
+        else:
+            east, north = self.map_offset_m
+            offset = f"map offset {east:g} m east, {north:g} m north ({self.map_offset_source})"
         return (
-            f"P(fail) = {self.p:.3f} ({self.failures}/{self.n}), {self.confidence:.0%} Wilson interval"
-            f" [{self.ci_low:.3f}, {self.ci_high:.3f}], at {r}"
+            f"P(fail) = {self.p:.3f} ({self.failures}/{self.n}: {self.no_fix} no fix, {self.beyond_r} beyond r),"
+            f" {self.confidence:.0%} Wilson interval [{self.ci_low:.3f}, {self.ci_high:.3f}],"
+            f" at r = {self.r_m:g} m in the map frame; {offset}"
         )
 
 
-def estimate(records: list[SimulationRecord], r_m: float, r_provisional: bool, confidence: float = 0.95) -> Estimate:
-    failures = sum(is_failure(r, r_m) for r in records)
+def estimate(records: list[SimulationRecord], r_m: float, confidence: float = 0.95) -> Estimate:
+    """P(fail) over the records, at r in the map frame. All records must share one map offset."""
+    offsets = {(None if r.map_offset_m is None else tuple(r.map_offset_m), r.map_offset_source) for r in records}
+    if len(offsets) > 1:
+        raise ValueError(f"records measured against different map offsets can't share an estimate: {offsets}")
+    offset, source = next(iter(offsets), (None, None))
+    no_fix = sum(is_no_fix(r) for r in records)
+    beyond_r = sum(is_beyond_r(r, r_m) for r in records)
+    failures = no_fix + beyond_r
     low, high = wilson_interval(failures, len(records), confidence)
-    return Estimate(len(records), failures, failures / len(records), low, high, confidence, r_m, r_provisional)
+    return Estimate(
+        n=len(records),
+        failures=failures,
+        no_fix=no_fix,
+        beyond_r=beyond_r,
+        p=failures / len(records),
+        ci_low=low,
+        ci_high=high,
+        confidence=confidence,
+        r_m=r_m,
+        map_offset_m=None if offset is None else list(offset),
+        map_offset_source=source,
+    )
 
 
 def run_samples(simulator, config: ScenarioConfig, seeds: Iterable[int], fidelity: str) -> list[SimulationRecord]:
@@ -118,7 +162,7 @@ def main() -> int:
     records = run_samples(simulator, config, seeds, args.fidelity)
     write_records(records, args.out_dir / "records.jsonl")
 
-    est = estimate(records, settings["provisional_r_m"], r_provisional=True)
+    est = estimate(records, settings["r_m"]["value"])
     out = asdict(est) | {
         "fidelity": args.fidelity,
         "seeds": [seeds.start, seeds.stop - 1],
@@ -129,7 +173,7 @@ def main() -> int:
         # Reruns need the same config: its hash says whether a later one still is.
         "config": str(args.config),
         "config_sha256": sha256_of(args.config),
-        "r_note": "provisional: r will be set from the pilot study (#13), not from this run",
+        "r_source": settings["r_m"]["source"],
     }
     path = args.out_dir / "estimate.json"
     tmp = path.with_name(path.name + ".tmp")

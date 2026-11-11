@@ -3,47 +3,94 @@ from dataclasses import asdict, fields
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
+import yaml
 from scipy.stats import binomtest
 
+from fidelis.map_frame import MapOffset, map_frame_error
 from fidelis.plain_mc import estimate, is_failure, read_records, run_samples, wilson_interval, write_records
 from fidelis.scenario import draw, load_config
 from fidelis.simulation import SimulationRecord
 
 REPO = Path(__file__).resolve().parents[1]
 CONFIG = load_config(REPO / "config" / "jezero.yaml")
+SELF_MADE = MapOffset(0.0, 0.0, "test: map made from the scene's own orthoimage")
 
 
-def record(seed=0, status="ok", error_m=1.0):
+def record(seed=0, status="ok", error_m=1.0, offset=SELF_MADE):
+    """A descent whose fix is error_m east of the truth (true frame), against a map shifted by offset."""
     ok = status == "ok"
+    error = [error_m, 0.0, 0.0] if ok else None
+    in_map = map_frame_error(error, offset) if ok else None
     return SimulationRecord(
         seed=seed,
         fidelity="mesh",
         status=status,
         true_position=[0.0, 0.0, 0.0],
-        estimated_position=[error_m, 0.0, 0.0] if ok else None,
-        error_vector=[error_m, 0.0, 0.0] if ok else None,
-        error_m=error_m if ok else None,
+        estimated_position=error,
+        error_vector=error,
+        error_m=abs(error_m) if ok else None,
         match_count=100,
         inlier_count=80 if ok else 0,
         cost_s=1.5,
         gpu="test GPU",
         scenario={},
+        map_offset_m=[offset.east_m, offset.north_m],
+        map_offset_source=offset.source,
+        map_frame_error_vector=in_map,
+        map_frame_error_m=float(np.linalg.norm(in_map)) if ok else None,
     )
+
+
+MAP_FRAME_FIELDS = ("map_offset_m", "map_offset_source", "map_frame_error_vector", "map_frame_error_m")
+
+
+def older_record(**kwargs):
+    """As written before ADR 0003: no map-frame fields at all."""
+    values = asdict(record(**kwargs))
+    for name in MAP_FRAME_FIELDS:
+        del values[name]
+    return values
 
 
 # --- what counts as a failure
 
 
 def test_an_error_beyond_r_is_a_failure_and_one_within_it_is_not():
-    assert is_failure(record(error_m=12.5), r_m=12.0)
-    assert not is_failure(record(error_m=11.9), r_m=12.0)
+    assert is_failure(record(error_m=40.5), r_m=40.0)
+    assert not is_failure(record(error_m=39.9), r_m=40.0)
 
 
 @pytest.mark.parametrize("status", ["too_few_matches", "no_solution"])
 def test_no_fix_at_all_is_a_failure_whatever_r_is(status):
     # A navigator that gives up hasn't kept the lander within r: that's a failure, not a skip.
     assert is_failure(record(status=status), r_m=1e9)
+
+
+def test_a_miss_beyond_r_only_in_the_true_frame_is_not_a_failure():
+    # 60 m from truth, but 55 m of it is the whole map's shift: 5 m off in the map frame.
+    shifted = MapOffset(55.0, 0.0, "test")
+    assert not is_failure(record(error_m=60.0, offset=shifted), r_m=40.0)
+
+
+def test_a_miss_beyond_r_in_both_frames_is_a_failure():
+    # 105 m from truth, 50 m of it the navigator's own: still beyond 40 m once the shift is removed.
+    shifted = MapOffset(55.0, 0.0, "test")
+    assert is_failure(record(error_m=105.0, offset=shifted), r_m=40.0)
+
+
+def test_a_miss_beyond_r_only_in_the_map_frame_is_a_failure():
+    # 15 m west of truth against a map shifted 30 m east: 45 m off in the map frame.
+    shifted = MapOffset(30.0, 0.0, "test")
+    assert is_failure(record(error_m=-15.0, offset=shifted), r_m=40.0)
+
+
+def test_the_jezero_r_is_lvss_40_m_requirement_with_its_source():
+    scene = yaml.safe_load((REPO / "config" / "jezero.yaml").read_text(encoding="utf-8"))
+    r = scene["plain_mc"]["r_m"]
+    assert r["value"] == 40
+    assert "Mohan" in r["source"]
 
 
 # --- the confidence interval
@@ -77,24 +124,74 @@ def test_no_samples_is_a_caller_error():
 
 
 def test_the_estimate_counts_failures_and_carries_its_interval_and_threshold():
-    records = [record(0, error_m=2.0), record(1, error_m=30.0), record(2, status="no_solution"), record(3, error_m=5.0)]
-    est = estimate(records, r_m=12.0, r_provisional=True)
+    records = [record(0, error_m=2.0), record(1, error_m=50.0), record(2, status="no_solution"), record(3, error_m=5.0)]
+    est = estimate(records, r_m=40.0)
     assert (est.n, est.failures, est.p) == (4, 2, 0.5)
     assert (est.ci_low, est.ci_high) == pytest.approx(wilson_interval(2, 4, 0.95))
     assert est.confidence == 0.95
-    assert est.r_m == 12.0 and est.r_provisional is True
+    assert est.r_m == 40.0
 
 
-def test_the_estimate_is_json_safe_and_says_r_is_provisional():
-    est = estimate([record(0)], r_m=12.0, r_provisional=True)
+def test_the_estimate_counts_no_fix_and_beyond_r_failures_separately():
+    records = [
+        record(0, error_m=2.0),
+        record(1, error_m=50.0),
+        record(2, status="no_solution"),
+        record(3, status="too_few_matches"),
+        record(4, error_m=5.0),
+    ]
+    est = estimate(records, r_m=40.0)
+    assert (est.failures, est.no_fix, est.beyond_r) == (3, 2, 1)
+    summary = est.summary()
+    assert "2 no fix" in summary and "1 beyond r" in summary
+
+
+def test_the_estimate_reports_the_offset_its_records_were_measured_against():
+    shifted = MapOffset(12.5, -3.0, "registered CTX to HiRISE (#40)")
+    est = estimate([record(0, offset=shifted), record(1, offset=shifted)], r_m=40.0)
+    assert est.map_offset_m == [12.5, -3.0]
+    assert est.map_offset_source == "registered CTX to HiRISE (#40)"
+    summary = est.summary()
+    assert "map frame" in summary and "12.5" in summary and "-3" in summary
+
+
+def test_records_measured_against_different_offsets_cannot_share_an_estimate():
+    a, b = MapOffset(0.0, 0.0, "self-made"), MapOffset(14.0, 0.0, "CTX")
+    with pytest.raises(ValueError, match="offset"):
+        estimate([record(0, offset=a), record(1, offset=b)], r_m=40.0)
+
+
+def test_the_estimate_is_json_safe():
+    est = estimate([record(0)], r_m=40.0)
     written = json.loads(json.dumps(asdict(est)))
-    assert written["r_provisional"] is True
-    assert "provisional" in est.summary().lower()
+    assert written["r_m"] == 40.0 and written["no_fix"] == 0 and written["beyond_r"] == 0
 
 
 def test_a_final_r_is_not_called_provisional():
-    est = estimate([record(0)], r_m=12.0, r_provisional=False)
+    # ADR 0003 fixed r at LVS's 40 m: nothing the estimate prints may call it provisional.
+    est = estimate([record(0)], r_m=40.0)
     assert "provisional" not in est.summary().lower()
+
+
+# --- records written before ADR 0003
+
+
+def test_an_older_record_without_map_frame_fields_still_loads(tmp_path):
+    path = tmp_path / "records.jsonl"
+    path.write_text(json.dumps(older_record(error_m=3.0)) + "\n", encoding="utf-8")
+    (loaded,) = read_records(path)
+    assert loaded.error_m == 3.0
+    assert all(getattr(loaded, name) is None for name in MAP_FRAME_FIELDS)
+
+
+def test_an_older_record_is_judged_by_its_true_frame_error():
+    # Before #36 the map was made from the scene's own orthoimage, so the offset was zero.
+    beyond, within = (SimulationRecord(**older_record(error_m=e)) for e in (45.0, 30.0))
+    assert is_failure(beyond, r_m=40.0)
+    assert not is_failure(within, r_m=40.0)
+    est = estimate([beyond, within], r_m=40.0)
+    assert (est.beyond_r, est.map_offset_m, est.map_offset_source) == (1, None, None)
+    assert "not recorded" in est.summary()
 
 
 # --- running and writing samples
