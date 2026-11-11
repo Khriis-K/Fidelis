@@ -234,3 +234,61 @@ def test_a_perfect_conditions_render_of_jezero_locates_within_half_a_ctx_map_pix
 
     assert result.status == "ok"
     assert np.linalg.norm(result.position - truth) < tolerance
+
+
+# --- map thinning: the knob behind the cheaper fidelity levels (docs/adr/0002-navigator-fidelity-ladder.md)
+
+
+def test_thinning_keeps_the_k_highest_scoring_map_keypoints(navigator):
+    full = navigator.map_features
+    thin = navigator.thinned(500).map_features
+    scores = full["keypoint_scores"][0].numpy()
+    kept = thin["keypoint_scores"][0].numpy()
+    assert len(kept) == 500
+    np.testing.assert_array_equal(np.sort(kept), np.sort(scores)[-500:])
+    # Each kept keypoint keeps its own position and descriptor, not another's.
+    rows = {tuple(p): i for i, p in enumerate(full["keypoints"][0].numpy())}
+    for point, descriptor in zip(thin["keypoints"][0].numpy(), thin["descriptors"][0].numpy(), strict=True):
+        np.testing.assert_array_equal(descriptor, full["descriptors"][0].numpy()[rows[tuple(point)]])
+    np.testing.assert_array_equal(thin["image_size"].numpy(), full["image_size"].numpy())
+
+
+def test_thinning_leaves_the_real_navigators_map_alone(navigator):
+    before = len(navigator.map_keypoints)
+    navigator.thinned(100)
+    assert len(navigator.map_keypoints) == before
+
+
+def test_thinning_to_every_keypoint_locates_exactly_as_the_real_navigator(navigator, flat_map):
+    # K = all must be the real navigator, not an approximation of it: the top fidelity level
+    # is the system under test.
+    count = len(navigator.map_keypoints)
+    for k in (count, 10 * count):
+        # The very same map features, in the same order: one weak keypoint dropped or
+        # reordered rarely moves an easy fix, so comparing fixes alone wouldn't notice.
+        thin = navigator.thinned(k).map_features
+        for key in ("keypoints", "descriptors", "keypoint_scores"):
+            np.testing.assert_array_equal(thin[key].numpy(), navigator.map_features[key].numpy())
+    image = np.clip(nadir_view(flat_map, heading_deg=30.0), 0, 1)
+    real = navigator.locate(image, K, attitude(30.0))
+    every = navigator.thinned(len(navigator.map_keypoints)).locate(image, K, attitude(30.0))
+    more = navigator.thinned(10 * len(navigator.map_keypoints)).locate(image, K, attitude(30.0))
+    for result in (every, more):
+        assert result.status == real.status
+        np.testing.assert_array_equal(result.position, real.position)
+        np.testing.assert_array_equal(result.map_points, real.map_points)
+
+
+def test_a_thinned_navigator_still_locates_on_a_well_textured_map(navigator, flat_map):
+    # Half the flat map's 2,884 keypoints: cheaper, and on easy ground still within a map pixel.
+    result = navigator.thinned(1400).locate(np.clip(nadir_view(flat_map), 0, 1), K)
+    assert result.status == "ok"
+    assert np.linalg.norm(result.position - TRUE_POSITION) < MAP_RES * EAST_SCALE
+    kept = {tuple(p) for p in navigator.thinned(1400).map_keypoints}
+    assert all(tuple(p) in kept for p in result.map_points)  # it matched only the map it kept
+
+
+@pytest.mark.parametrize("k", [0, -5])
+def test_thinning_to_no_keypoints_is_a_caller_error(navigator, k):
+    with pytest.raises(ValueError, match="at least one"):
+        navigator.thinned(k)

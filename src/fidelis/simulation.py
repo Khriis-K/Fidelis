@@ -6,9 +6,11 @@ it at that fidelity under the scenario's sun, turns the render into a camera ima
 navigation error, the navigator's diagnostics, the wall-clock cost and the GPU it ran on;
 everything else about the descent comes back from the seed.
 
-Fidelity levels are renderers, by name: `"mesh"` (path-traced mesh) and `"splat"` (a
-Gaussian splat scene trained from mesh renders, one per sun), with cheaper splat levels to
-come behind the same interface. A renderer is any callable
+A fidelity level names a renderer, `"mesh"` (path-traced mesh) or `"splat"` (a Gaussian
+splat scene trained from mesh renders, one per sun), optionally thinned: `"splat-k8000"`
+renders the same splat but matches against only the map's 8,000 highest-scoring keypoints
+(map thinning, docs/adr/0002-navigator-fidelity-ladder.md). A bare name is the real
+navigator; the cheaper levels differ only in the navigator. A renderer is any callable
 `(pose, intrinsics, sun_index, seed) -> radiance image`. One that loads a scene per sun
 may also have `use_sun(sun_index)`, which `run` calls before the clock starts, so the
 recorded cost is the per-sample price and not a scene load.
@@ -76,6 +78,9 @@ class SimulationRecord:
     # SHA-256 of the scene config: the seed reruns this descent only under the same config.
     # None for a simulator built without one (tests); optional so older records still load.
     config_sha256: str | None = None
+    # How many map keypoints the level's navigator matched against: the whole map for a bare
+    # renderer name, and K past the map's count is the whole map too. None in older records.
+    map_keypoints: int | None = None
 
 
 @dataclass(frozen=True)
@@ -97,20 +102,23 @@ class Simulator:
         self.navigator = navigator
         self.intrinsics = intrinsics
         self.config_sha256 = config_sha256
+        self._thinned: dict[int, Navigator] = {}
         self.gpu = torch.cuda.get_device_name() if navigator.device.startswith("cuda") else "cpu"
 
     def run(self, scenario: Scenario, fidelity: str) -> Run:
-        if fidelity not in self.renderers:
+        renderer_name, map_keypoints = parse_fidelity(fidelity)
+        if renderer_name not in self.renderers:
             raise ValueError(f"unknown fidelity {fidelity!r}; this simulator has {sorted(self.renderers)}")
-        ground_z = self.navigator.map.ground_height(scenario.offset_east_m, scenario.offset_north_m)
+        navigator = self._navigator(map_keypoints)
+        ground_z = navigator.map.ground_height(scenario.offset_east_m, scenario.offset_north_m)
         pose = scenario_pose(scenario, ground_z)
-        renderer = self.renderers[fidelity]
+        renderer = self.renderers[renderer_name]
         if hasattr(renderer, "use_sun"):
             renderer.use_sun(scenario.sun_index)
         start = time.perf_counter()
         radiance = renderer(pose, self.intrinsics, scenario.sun_index, scenario.seed)
         image = camera_image(radiance, scenario)
-        nav = self.navigator.locate(image, self.intrinsics, pose.rotation)
+        nav = navigator.locate(image, self.intrinsics, pose.rotation)
         cost = time.perf_counter() - start
 
         estimate = error = None
@@ -133,8 +141,27 @@ class Simulator:
             gpu=self.gpu,
             scenario=inputs,
             config_sha256=self.config_sha256,
+            map_keypoints=len(navigator.map_features["keypoints"][0]),
         )
         return Run(record, image, nav)
+
+    def _navigator(self, map_keypoints: int | None) -> Navigator:
+        """The real navigator, or one thinned to `map_keypoints`, built once per K so it isn't charged to a sample."""
+        if map_keypoints is None:
+            return self.navigator
+        if map_keypoints not in self._thinned:
+            self._thinned[map_keypoints] = self.navigator.thinned(map_keypoints)
+        return self._thinned[map_keypoints]
+
+
+def parse_fidelity(fidelity: str) -> tuple[str, int | None]:
+    """A level's renderer and map keypoint count: "splat-k8000" is ("splat", 8000), "splat" is ("splat", None)."""
+    renderer, sep, k = fidelity.rpartition("-k")
+    if not sep:
+        return fidelity, None
+    if not k.isdigit() or int(k) < 1:
+        raise ValueError(f"fidelity {fidelity!r}: after '-k' comes a whole number of map keypoints, at least 1")
+    return renderer, int(k)
 
 
 def build_simulator(
@@ -149,20 +176,22 @@ def build_simulator(
     scene = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
     data_dir = Path(data_dir)
     renderers = {}
-    for fidelity in fidelities:
-        if fidelity == "mesh":
+    # A thinned level ("splat-k8000") renders with its renderer; the simulator thins the map itself.
+    renderer_names = {parse_fidelity(f)[0]: f for f in fidelities}  # each renderer once, with a level that asked for it
+    for renderer_name, fidelity in renderer_names.items():
+        if renderer_name == "mesh":
             from fidelis.render.mesh_render import MeshRenderer, config_suns
 
             if suns is None:
                 suns = config_suns(scene)
             renderers["mesh"] = MeshRenderer(data_dir / "mesh", suns, spp=scene["simulation"]["mesh_spp"])
-        elif fidelity == "splat":
+        elif renderer_name == "splat":
             from fidelis.render.splat_render import SplatRenderer
 
             checkpoints = {i: data_dir / "splat" / f"sun{i}" / "splat.pt" for i in range(len(scene["suns"]))}
             renderers["splat"] = SplatRenderer({i: p for i, p in checkpoints.items() if p.exists()}, device=device)
         else:
-            raise ValueError(f"unknown fidelity {fidelity!r}; expected 'mesh' or 'splat'")
+            raise ValueError(f"unknown fidelity {fidelity!r}; expected 'mesh' or 'splat', maybe with '-k<K>'")
     orbital_map = load_orbital_map(
         data_dir / "matching_map" / "map.tif", data_dir / "scene" / "dtm.tif", data_dir / "mesh" / "mesh.json"
     )

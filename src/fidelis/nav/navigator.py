@@ -27,6 +27,7 @@ north-up view before extracting features. Keypoints go back to the camera's own 
 before PnP, so the warp never reaches the pose or the returned matches.
 """
 
+import copy
 from dataclasses import dataclass
 
 import cv2
@@ -82,6 +83,11 @@ def warp_to_nadir(image: np.ndarray, homography: np.ndarray) -> tuple[np.ndarray
     # Beyond the canvas counts as covered: only the warp's empty corners are new edges.
     valid = cv2.erode(covered, np.ones((2 * BORDER_PX + 1, 2 * BORDER_PX + 1), np.uint8), borderValue=1)
     return warped, np.linalg.inv(to_canvas), valid.astype(bool)
+
+
+def select_keypoints(features: dict, keep: torch.Tensor) -> dict:
+    """LightGlue features with only the keypoints `keep` picks (a mask or indices); the rest unchanged."""
+    return {**features, **{key: features[key][:, keep] for key in ("keypoints", "descriptors", "keypoint_scores")}}
 
 
 @dataclass(frozen=True)
@@ -146,6 +152,26 @@ class Navigator:
         solution = solve_pose(image_points, self.map.pixel_to_world(map_points), intrinsics)
         return NavResult(solution.status, solution.pose, image_points, map_points, solution.inliers, keypoints)
 
+    def thinned(self, k: int) -> "Navigator":
+        """This navigator with only the `k` highest-scoring map keypoints, from anywhere on the map.
+
+        The cheaper fidelity levels' knob (docs/adr/0002-navigator-fidelity-ladder.md): LightGlue's
+        cost grows with the map's keypoint count. No position window, so far-off look-alikes
+        stay in proportion. Shares this navigator's models and map; `k` at or above the map's
+        count gives back the real navigator's features unchanged.
+        """
+        if k < 1:
+            raise ValueError(f"a thinned map needs at least one keypoint, got k={k}")
+        scores = self.map_features["keypoint_scores"][0]
+        # A stable sort, so tied scores keep the same keypoints on any device; then back to the
+        # original order, so K = all is the real navigator's input exactly.
+        keep = torch.argsort(scores, descending=True, stable=True)[:k].sort().values
+        # Shallow: the models and map are shared, not reloaded. map_features is the only
+        # per-instance state that differs; anything added to Navigator later must be checked here.
+        thin = copy.copy(self)
+        thin.map_features = select_keypoints(self.map_features, keep)
+        return thin
+
     @property
     def map_keypoints(self) -> np.ndarray:
         """M x 2, every map keypoint, in map pixels."""
@@ -155,8 +181,7 @@ class Navigator:
         """Only the keypoints that land where `valid` is true."""
         cols, rows = features["keypoints"][0].round().long().cpu().numpy().T
         rows, cols = rows.clip(0, valid.shape[0] - 1), cols.clip(0, valid.shape[1] - 1)
-        keep = torch.from_numpy(valid[rows, cols]).to(self.device)
-        return {**features, **{k: features[k][:, keep] for k in ("keypoints", "descriptors", "keypoint_scores")}}
+        return select_keypoints(features, torch.from_numpy(valid[rows, cols]).to(self.device))
 
     def _tensor(self, gray: np.ndarray) -> torch.Tensor:
         # ALIKED takes RGB; a grey image is three equal channels.

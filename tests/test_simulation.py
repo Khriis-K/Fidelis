@@ -231,6 +231,52 @@ def test_an_unknown_fidelity_is_a_caller_error(simulator):
         simulator.run(scenario(), "ultra")
 
 
+# --- navigator fidelity levels: "<renderer>-k<K>" thins the map to K keypoints (docs/adr/0002)
+
+
+def test_a_thinned_level_runs_the_same_render_through_a_thinned_navigator(simulator):
+    run = simulator.run(scenario(), "flat-k1400")
+    assert run.record.fidelity == "flat-k1400"
+    assert run.record.status == "ok"
+    assert run.record.error_m < MAP_PIXEL_M
+    kept = {tuple(p) for p in simulator.navigator.thinned(1400).map_keypoints}
+    assert all(tuple(p) in kept for p in run.nav.map_points)
+    np.testing.assert_array_equal(run.image, simulator.run(scenario(), "flat").image)
+
+
+def test_a_level_thinned_to_every_keypoint_is_the_real_navigator(simulator):
+    s = scenario(noise_sd=0.005, heading_deg=45.0)
+    count = len(simulator.navigator.map_keypoints)
+    real = simulator.run(s, "flat").record
+    every = simulator.run(s, f"flat-k{count}").record
+    more = simulator.run(s, f"flat-k{10 * count}").record
+    # The record says how many map keypoints the level really matched against: K past the
+    # map's count is the whole map, and one weak keypoint dropped wouldn't move the error.
+    assert real.map_keypoints == every.map_keypoints == more.map_keypoints == count
+    assert simulator.run(s, "flat-k1400").record.map_keypoints == 1400
+    assert every.error_vector == real.error_vector
+    assert (every.match_count, every.inlier_count) == (real.match_count, real.inlier_count)
+
+
+def test_per_sample_cost_increases_with_fidelity_level(simulator):
+    # Seam 1's cost ordering, which MXMCPy's sample allocation relies on. Levels about 1/10,
+    # 4/10 and all of the map measured 0.32, 0.40 and 0.55 s median on the laptop CPU, each
+    # within about 3% run to run. Each must cost at least 10% more than the one below: a bare
+    # `<` would pass one time in six if thinning did nothing and the costs were equal.
+    levels = ["flat-k300", "flat-k1200", "flat"]
+    for level in levels:
+        simulator.run(scenario(), level)  # warm-up, so first-call overhead isn't charged to one level
+    costs = [np.median([simulator.run(scenario(seed=i), level).record.cost_s for i in range(5)]) for level in levels]
+    assert costs[1] > 1.1 * costs[0]
+    assert costs[2] > 1.1 * costs[1]
+
+
+@pytest.mark.parametrize("level", ["flat-k0", "flat-kmany", "flat-k", "ultra-k300", "flat-k-5"])
+def test_a_malformed_or_unknown_level_is_a_caller_error(simulator, level):
+    with pytest.raises(ValueError, match="fidelity"):
+        simulator.run(scenario(), level)
+
+
 def test_the_renderer_gets_the_scenarios_sun_seed_and_true_camera(simulator):
     seen = []
 

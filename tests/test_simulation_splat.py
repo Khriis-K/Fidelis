@@ -123,3 +123,13 @@ def test_a_sun_with_no_splat_is_a_caller_error_not_a_crash_mid_batch(simulator):
     missing = next(i for i in range(len(SCENE["suns"])) if i not in simulator.renderers["splat"].suns)
     with pytest.raises(ValueError, match="sun"):
         simulator.run(scenario(sun_index=missing), "splat")
+
+
+def test_a_thinned_splat_level_builds_and_runs_end_to_end():
+    # The CARC sweep runs levels through `fidelis-plain-mc --fidelity splat-k<K>`, which goes
+    # through build_simulator: a thinned level must build from its name, not just run once built.
+    simulator = build_simulator(CONFIG, DATA, fidelities=("splat-k20000",))
+    record = simulator.run(scenario(), "splat-k20000").record
+    assert record.fidelity == "splat-k20000"
+    assert record.status == "ok"
+    assert record.error_m < 12.0  # the config's provisional r
