@@ -124,8 +124,7 @@ def summarise(table: dict, min_response: float = MIN_RESPONSE) -> dict:
     re, rn = de[used] - east, dn[used] - north
     count = int(used.sum())
 
-    def sd(values):
-        return float(np.std(values, ddof=1)) if count > 1 else float("nan")
+    sd_east, sd_north = (float(np.std(v, ddof=1)) if count > 1 else float("nan") for v in (de[used], dn[used]))
 
     trend = {}
     for name, residual in (("de", re), ("dn", rn)):
@@ -136,10 +135,11 @@ def summarise(table: dict, min_response: float = MIN_RESPONSE) -> dict:
     return {
         "east_m": east,
         "north_m": north,
-        "east_sd_m": sd(de[used]),
-        "north_sd_m": sd(dn[used]),
-        "east_se_m": sd(de[used]) / np.sqrt(count),
-        "north_se_m": sd(dn[used]) / np.sqrt(count),
+        "east_sd_m": sd_east,
+        "north_sd_m": sd_north,
+        # Valid only if windows are independent; on the real pair they aren't (map-offset.md).
+        "east_se_m": sd_east / np.sqrt(count),
+        "north_se_m": sd_north / np.sqrt(count),
         "residual_rms_m": float(np.sqrt(np.mean(re**2 + rn**2))),
         "residual_p99_m": float(np.percentile(np.hypot(re, rn), 99)),
         "trend_m_per_km": trend,
@@ -249,7 +249,7 @@ def main() -> int:
     tmp.replace(args.out)
     print(
         f"CTX - HiRISE: {result['east_m']:+.2f} m east, {result['north_m']:+.2f} m north (map metres), "
-        f"se {result['east_se_m']:.2f} / {result['north_se_m']:.2f} m, {result['windows_used']} windows; "
+        f"window sd {result['east_sd_m']:.2f} / {result['north_sd_m']:.2f} m, {result['windows_used']} windows; "
         f"residual rms {result['residual_rms_m']:.2f} m"
     )
     return 0
