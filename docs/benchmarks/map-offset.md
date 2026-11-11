@@ -2,12 +2,12 @@
 
 ADR 0003 measures navigation error in the **map frame**: against where the matching map puts the ground, as LVS was judged. Fidelis renders from the HiRISE orthoimage, but the real LVS map is the USGS CTX orthomosaic (`ctx_ortho` in `config/jezero.yaml`). Any single shift between the two would count as navigation error if left in, so it is measured once, here, by registering the two orbital images to each other. It is never estimated from descent results, since that would also hide navigator bias. Measured on 2026-11-11 on the laptop CPU (no GPU).
 
-    uv run snakemake --profile profiles/local map_offset
+    uv run snakemake --profile profiles/local jezero_map_offset
     uv run python scripts/check_map_offset.py data/jezero/tile/ortho.tif data/jezero/raw/ctx_ortho.tif OUT_DIR
 
 ## Result
 
-**CTX minus HiRISE: +1.99 m east, −1.49 m north** (map metres), **±0.4 m east and ±0.6 m north**. On the ground that is +1.89 m east (the projection stretches east–west by 1/cos(latitude), scale 0.9486), so **2.41 m in all**. Recorded in `config/jezero.yaml` as `map_offset` (`east_m: +1.99`, `north_m: -1.49`).
+**CTX minus HiRISE: +1.99 m east, −1.49 m north** (map metres), **±0.4 m east and ±0.6 m north**. On the ground that is +1.89 m east (the projection stretches east–west by 1/cos(latitude), scale 0.9486), so **2.41 m in all**. Recorded in `config/jezero.yaml` as `map_offset` (`east_m: +1.99`, `north_m: -1.49`, in map metres, plus `ground_m` for the scene's ground-metre frame).
 
 Sign: CTX shows the ground that HiRISE shows at (x, y) at (x + 1.99, y − 1.49). So a navigator matching HiRISE-rendered views against the CTX map should land about 2 m east and 1.5 m south of truth while doing nothing wrong. The map-frame error (#35) subtracts this.
 
@@ -22,7 +22,7 @@ For scale: it is 6% of the 40 m failure line. It is far inside the 300 m absolut
 - **Windows.** 13 × 13 non-overlapping windows of 128 CTX pixels (768 m). Each window is normalised (mean 0, sd 1, so brightness differences don't count) and Hann-tapered (so its edges don't).
 - **Phase correlation, iterated.** Each window's shift is the peak of the phase correlation, refined to sub-pixel by a parabola through the peak on each axis. Because both windows share the same taper, one pass is pulled towards zero shift (by 10–20% on the synthetic test texture). So the CTX window is shifted back by the estimate (Fourier shift) and correlated again until the correction is under 10⁻⁴ pixel.
 - **Whole-map offset** = the median of the window shifts. Windows with a correlation peak under 0.1 are dropped as too weak, and so is any window more than max(5 robust sd, 30 m) from the median, as a wrong peak. 30 m sits above the LVS map's 18 m (99%) local-distortion requirement, so real distortion of the allowed size is kept. **On the real pair, neither rule dropped anything:** all 169 windows were used, with peaks of 0.23–0.49 (median 0.38).
-- **Residual** = each window's shift minus the offset. A plane fit across the tile (`trend_m_per_km`) shows whether it varies systematically.
+- **Residual** = each window's shift minus the offset. A plane fit across the tile (`trend_m_per_km`, map metres per map km) shows whether it varies systematically.
 
 Code: `src/fidelis/terrain/map_offset.py`. Tests: `tests/terrain/test_map_offset.py`. The synthetic pairs there are a broadband texture (1,500 waves, 15 m to 1 km) evaluated exactly at every pixel centre, with the CTX copy on a grid offset like the real one. The tests recover a known 14 m / −9 m shift through a brightness change, shifts of ¼, ½ and ¾ of a CTX pixel, zero from identical images, and a 3 m/km warp as a trend rather than absorbing it.
 
@@ -79,7 +79,7 @@ The offset moves by at most 0.08 m across window sizes.
 
 ## Uncertainty, and why it isn't the standard error
 
-The windows' standard error is 0.04 m east and 0.08 m north, but it **is not a valid uncertainty**. It assumes independent windows, and the residuals are strongly correlated (0.8+), so the effective number of independent windows is far below 169. The quoted **±0.4 m east and ±0.6 m north** is instead half the spread of the four half-tile medians (east 1.64–2.39, north −1.91 to −0.77). That is a Fidelis choice. It reflects the real question: how much the "one shift" depends on which part of the tile is used. It also covers the method's own error (≤ 0.10 m from injection) and the window-size spread (≤ 0.08 m).
+The windows' standard error is 0.04 m east and 0.08 m north, but it **is not a valid uncertainty**. It assumes independent windows, and the residuals are strongly correlated (0.8+), so the effective number of independent windows is far below 169. The quoted **±0.4 m east and ±0.6 m north** is instead half the spread of the four half-tile medians (east 1.64–2.39, north −1.91 to −0.77, printed by `scripts/check_map_offset.py`; the pipeline's `offset.json` doesn't carry it). It is **a Fidelis heuristic bound, not a 1σ or any stated confidence level**. The halves overlap, so they aren't independent, and the spread mostly reflects the residual's spatial trend. It answers a practical question: how much the "one shift" depends on which part of the tile is used. It covers the method's own error (≤ 0.10 m from injection) and the window-size spread (≤ 0.08 m). It does **not** cover lighting bias (see Caveats), which isn't sized and could be larger.
 
 ## Caveats
 
