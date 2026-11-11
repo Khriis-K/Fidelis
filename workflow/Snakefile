@@ -30,7 +30,7 @@ def config_values(*keys):
 # The matching map's resolutions, without their source notes: rewording a citation changes nothing.
 MAP_RESOLUTIONS = {key: value["value_m"] for key, value in config["matching_map"].items()}
 # What fidelis-plain-mc and fidelis-match-viz read: the sampler, the simulator, the run.
-MC_CONFIG = config_values("plain_mc", "scenario", "simulation", "suns", "tile", "scene")
+MC_CONFIG = config_values("plain_mc", "map_offset", "scenario", "simulation", "suns", "tile", "scene")
 
 
 JEZERO = "data/jezero"
@@ -174,8 +174,8 @@ rule jezero_matching_map:
         f"fidelis-matching-map config/jezero.yaml {JEZERO}/scene {{output[0]}}"
 
 # The first end-to-end estimate: N seeded descents through the mesh renderer and the
-# navigator, then P(fail) with a Wilson interval at the config's PROVISIONAL r. Each
-# record reruns from its seed. `snakemake plain_mc`.
+# navigator, then P(fail) with a Wilson interval: no fix, or a miss beyond r = 40 m in the
+# map frame (ADR 0003). Each record reruns from its seed. `snakemake plain_mc`.
 rule plain_mc:
     input:
         rules.jezero.input,

@@ -202,8 +202,26 @@ splat:
 # The first end-to-end estimate (src/fidelis/plain_mc.py): `snakemake plain_mc`.
 plain_mc:
   samples: 20
-  # PROVISIONAL. The real r comes from the pilot study (#13), set so that 2-10% of descents
-  # fail. Until then: two of the 6 m CTX-like map pixels, a Fidelis choice. Perfect-conditions
-  # fixes land within 1.9 m (docs/benchmarks/navigator.md), so 12 m marks a fix that's gone
-  # wrong rather than merely imprecise. Not LVS's 40 m target, which is only a reference line.
-  provisional_r_m: 12
+  # A descent fails if it gets no fix, or its fix is more than r off in the map frame (below).
+  # r is LVS's requirement and is never tuned to a target failure rate
+  # (docs/adr/0003-failure-is-40m-in-the-map-frame.md). Other lines, 12 m included, can be
+  # read off the stored errors, labelled exploratory.
+  r_m:
+    value: 40
+    source: >-
+      Mohan et al. 2021, Assessment of M2020 Terrain Relative Landing Accuracy: Flight
+      Performance vs. Predicts, AAS 21-541, p.4: LVS shall "generate a solution with less
+      than 40m accuracy within 10s of initialization, 99% of the time"
+      (docs/research/lvs-error-sources.md).
+
+# The whole-map offset between the matching map and the rendered scene: where the map puts a
+# ground feature, less where the scene has it, metres east and north (src/fidelis/map_frame.py).
+# Removed from every fix before failures are counted, and reported on its own (ADR 0003).
+# Measured by registering the two orbital images (#40), never from descent results.
+map_offset:
+  east_m: 0.0
+  north_m: 0.0
+  source: >-
+    Zero by construction: the matching map is a block average of the same HiRISE
+    orthoimage the scene renders, so the two share one frame exactly. #36 switches to the
+    CTX map, and #40's measured offset replaces this.
