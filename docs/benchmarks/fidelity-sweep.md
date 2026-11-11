@@ -45,4 +45,37 @@ ADR 0002 makes the cheaper levels map-thinned navigators, `splat-k<K>`: the same
 
 ## Results
 
-Not run yet.
+**Run on 2026-11-11.** One debug job on one NVIDIA A40, with the command from the plan (job ID not recorded). All 8 levels ran all 300 seeds. The analysis is `uv run python -m fidelis.fidelity_sweep results/fidelity_sweep`, which applies the rule above as written (`src/fidelis/fidelity_sweep.py`).
+
+### What the rule printed
+
+The real navigator's median cost was 0.3228 s. Ceiling (real vs real rerun): ρ = 1.0000. Shuffled control: ρ = −0.124. All gates passed.
+
+| Level | Median cost s | Cost / real | ρ | Spearman | Seeds paired | Disagreements | Eligible |
+|---|---|---|---|---|---|---|---|
+| splat-k1000 | 0.1049 | 0.33 | −0.095 | −0.017 | 189 | 11 | no: correlation, disagreements |
+| splat-k2000 | 0.1009 | 0.31 | −0.071 | 0.056 | 200 | 0 | no: correlation |
+| splat-k4000 | 0.0977 | 0.30 | 0.141 | 0.223 | 200 | 0 | no: correlation |
+| splat-k8000 | 0.1043 | 0.32 | 0.405 | 0.333 | 200 | 0 | no: correlation |
+| splat-k16000 | 0.1217 | 0.38 | 0.545 | 0.478 | 200 | 0 | no: correlation |
+| splat-k32000 | 0.1671 | 0.52 | 0.832 | 0.819 | 200 | 0 | yes |
+
+The rule's mechanical output: **splat-k32000 alone**, with predicted MFMC variance / plain MC = **1.332**. The bootstrap 90% interval is [1.261, 1.393], and the holdout gives 1.357, inside that interval.
+
+### A gap in the rule
+
+A ratio above 1 means MFMC with this level would be **worse** than plain Monte Carlo at the same budget: about 33% more variance. The rule picks the lowest ratio among eligible levels but never required it to be below 1. That was an oversight in writing it, not a threshold that moved. Read for its intent, the result is **no usable level**: map thinning fails as a fidelity knob under this rule. The k32000 "choice" shouldn't be used.
+
+### Diagnostics (computed from the same records, not part of the rule)
+
+- **The rerun is bit-identical.** All 300 seeds gave exactly the same error in both processes. On the A40, the splat render and the navigator are deterministic across processes. ADR 0001's jitter came from Mitsuba's mesh renderer and doesn't show here. So the ceiling of 1.0 is real, but it tests nothing.
+- **The real navigator's errors are small and tight:** median 2.20 m, 90th percentile 2.89 m, maximum 4.1 m. Its median is 1,993 inliers. No seed came near r = 12 m.
+- **The cheap levels' failures are degraded fixes, not wild ones.** k1000 had 19 no-fix seeds and 17 fixes beyond 12 m (maximum 36 m), with a median of 20 inliers. k2000 had 2 no-fix seeds and 9 fixes beyond 12 m, all between 12 and 19 m, with a median of 43 inliers.
+- **Cost stops falling at about 0.10 s** (30% of the real navigator) for K ≤ 8,000. Below that, matching no longer dominates, and the render, camera model and keypoint extraction set the floor (`descent-profile.md`: about 0.07 s of non-matching stages on this GPU type).
+- The real navigator's records give 70,749 map keypoints, not the 70,726 quoted in `descent-profile.md`. That's not investigated, and it doesn't affect any result above.
+
+### What it means
+
+- **Thinning re-randomizes the metre-level error instead of tracking it.** The real navigator's spread is a few tenths of a metre around 2.2 m. That spread comes from which of about 2,000 inliers survive RANSAC, not from scenarios being easy or hard. Change the map's keypoints and you redraw it. Correlation needs a shared cause, such as hard scenarios that hurt every level. These 300 descents don't have one: the real navigator never fails. This is ADR 0002 §4's bulk-versus-tail caveat, showing up as the main result.
+- **The descent keypoint cap (ADR 0002 §6) would most likely hit the same wall.** It also changes which matches survive. That's an inference, not a measurement.
+- **The deeper problem is the failure indicator.** With 0/300 failures at r = 12 m, the real navigator's indicator is constant, so P(fail) has nothing for MFMC to estimate. Whether cheap levels track the real one *in the tail* can only be tested once descents actually fail. That needs the pilot study (#13), r, and possibly harder scenarios.
