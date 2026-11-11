@@ -77,8 +77,14 @@ To pick an A100 size, add `--constraint=a100-40gb` or `--constraint=a100-80gb`. 
 **Why pinning matters for Fidelis:** spec story 8 records each fidelity level's cost together with the GPU type, and MXMCPy uses those costs to split samples across fidelity levels. If jobs drift across GPU models, the costs stop being comparable and the sample split is wrong. Every timed job must pin one type, and for A100s one memory size too.
 
 - V100 has no bf16 support, so mixed precision there means fp16 with a GradScaler. [Places]
-- **Open:** which GPU type to standardize on. L40S has by far the highest FP32 rate per SU of anything listed, which suits splat rendering. We won't know until we benchmark real Fidelis renders on it, though. Both L40S and A100 pass the smoke test (see "GPU types that passed"), so either is a working fallback.
-- **L40S availability is an input to that choice.** The evening of 2026-11-10, `squeue -p gpu` listed 78 pending L40S jobs (65 on Priority, 13 on dependencies) and 7 running, using 9 L40S GPUs on nodes b17-16, b18-16, b18-17 and b18-18. A 30-minute single-L40S job of ours (14002051) sat pending on Priority behind them. One snapshot, not a wait-time measurement; the user reports L40S waits have been long lately.
+- **Pinned: A40** for every cost measurement from issue #10 onward (the user's call, 2026-11-11). Request it with `--gres=gpu:a40:1` and set `TORCH_EXTENSIONS_DIR=$HOME/.cache/torch_extensions_a40`. Why A40:
+  - It's the only type that has had free cards when we looked.
+  - The descent profile already ran on it, so all the cost numbers so far come from one GPU type.
+  - L40S has the highest FP32 rate per SU of anything listed, but our L40S job never got a node.
+  
+  The A40 is on both `gpu` and `debug`; debug jobs are limited to 1 h. Earlier timings on L40S (the plain MC and splat runs) aren't comparable with A40 costs.
+- **L40S availability is an input to that choice.** The evening of 2026-11-10, `squeue -p gpu` listed 78 pending L40S jobs (65 on Priority, 13 on dependencies) and 7 running, using 9 L40S GPUs on nodes b17-16, b18-16, b18-17 and b18-18. A 30-minute single-L40S job of ours (14002051) sat pending on Priority behind them. One snapshot, not a wait-time measurement; the user reports L40S waits have been long lately. Job 14002051 ended `CANCELLED` without ever getting a node (`sacct`, checked 2026-11-11), so there's no L40S descent profile.
+- **Snapshot, 2026-11-11.** `noderes -f -g` showed 2 free A40s (b11-09, debug partition, idle) and 2 free P100s, and nothing free on the `gpu` partition. On `squeue -p gpu`, single-GPU jobs that named a type had these pending and running counts: A100 158 / 8, A40 114 / 26, L40S 30 / 3. Another 577 untyped single-GPU jobs were pending. One snapshot again.
 
 ## Storage [CARC]
 
