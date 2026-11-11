@@ -108,6 +108,22 @@ matching_map:
       mapping orbit (PDS CTX instrument description). Cheng et al. 2021, section 2.1:
       CTX acquires "images at 6 m per pixel scale over a swath 30 km wide".
 
+# The whole-map offset between the real LVS map (ctx_ortho) and the HiRISE tile the scene
+# renders (#40, ADR 0003 decision 4): CTX minus HiRISE, in MAP metres (east ground metres
+# are east_m x the tile's east_west_ground_scale, 0.9486: +1.89 m). CTX shows the ground
+# HiRISE has at (x, y) at (x + east_m, y + north_m), so a navigator matching renders against
+# the CTX map lands truth + offset; the map-frame error (#35) removes it. Today's matching map
+# is HiRISE-derived over the tile, so the offset only applies once the CTX map is swapped in
+# (#36). Measured by registering the two orthoimages (`snakemake map_offset`), never from
+# descents. Uncertainty is half the spread of the four half-tile medians, which the
+# systematic residual (up to ~3 m across the tile) dominates; the method's own error on
+# injected shifts was at most 0.10 m. Full method and caveats in the write-up.
+map_offset:
+  east_m: 1.99
+  north_m: -1.49
+  uncertainty_m: {east: 0.4, north: 0.6}
+  write_up: docs/benchmarks/map-offset.md
+
 # Per-descent random inputs (src/fidelis/scenario.py). Sources and reasoning:
 # docs/research/edl-dispersions-for-scenario-sampler.md. Every distribution is bounded,
 # and load_config refuses any whose worst case could see past the scene (scene.size_m):
