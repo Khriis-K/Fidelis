@@ -173,6 +173,22 @@ rule jezero_matching_map:
     shell:
         f"fidelis-matching-map config/jezero.yaml {JEZERO}/scene {{output[0]}}"
 
+# The whole-map offset between the LVS map (CTX) and the HiRISE tile the scene renders (#40),
+# by registering the two orthoimages. CPU only, a few minutes. The result is copied by hand
+# into config/jezero.yaml's map_offset, with docs/benchmarks/map-offset.md as its source.
+rule map_offset:
+    input:
+        f"{JEZERO}/tile/ortho.tif",
+        f"{JEZERO}/tile/tile.json",
+        f"{JEZERO}/raw/ctx_ortho.verified",
+    output:
+        f"{JEZERO}/map_offset/offset.json",
+    resources:
+        mem_mb=4000,
+    shell:
+        f"fidelis-map-offset {JEZERO}/tile {JEZERO}/raw/ctx_ortho.tif {{output}}"
+
+
 # The first end-to-end estimate: N seeded descents through the mesh renderer and the
 # navigator, then P(fail) with a Wilson interval: no fix, or a miss beyond r = 40 m in the
 # map frame (ADR 0003). Each record reruns from its seed. `snakemake plain_mc`.
