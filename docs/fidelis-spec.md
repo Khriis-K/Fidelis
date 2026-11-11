@@ -12,7 +12,7 @@ From the developer's perspective, there is also a portfolio problem: demonstrati
 
 Fidelis builds a photoreal, renderable model of Jezero Crater from public USGS HiRISE terrain data, simulates many scripted descents under randomized operating conditions (true position and altitude, camera attitude, image quality, sun angle), runs a learned feature-matching navigator on each rendered descent image, and records the navigation error at handoff.
 
-Failure is defined as navigation error at handoff exceeding a threshold r. Fidelis estimates a smoothed failure probability (plus mean and variance of navigation error) using three Gaussian-splat render fidelity levels and NASA Langley's MXMCPy library, comparing multifidelity Monte Carlo (MFMC), multilevel Monte Carlo (MLMC), and approximate control variates (ACV) against plain Monte Carlo at equal compute. Estimates are validated against a brute-force reference value with repeated independent trials, and predicted variance is compared with observed variance.
+Failure is defined as no fix, or a navigation error at handoff beyond r = 40 m (LVS's requirement), measured in the map frame (ADR 0003). Fidelis estimates a smoothed failure probability (plus mean and variance of navigation error) using navigator fidelity levels on a shared Gaussian-splat render (ADR 0002) and NASA Langley's MXMCPy library, comparing multifidelity Monte Carlo (MFMC), multilevel Monte Carlo (MLMC), and approximate control variates (ACV) against plain Monte Carlo at equal compute. Estimates are validated against a brute-force reference value with repeated independent trials, and predicted variance is compared with observed variance.
 
 The navigator is fine-tuned only on terrain from six other Mars regions, so Jezero is a genuinely unseen test site. Results are presented in an interactive web replay where visitors fly over the splat terrain, replay individual simulated descents from the descent camera's point of view with the navigator's keypoints and map matches drawn over it, and watch landing-estimate dispersion ellipses build up, plus a short highlight video.
 
@@ -24,7 +24,7 @@ The navigator is fine-tuned only on terrain from six other Mars regions, so Jeze
 4. As the developer, I want to render the terrain mesh from many viewpoints under a chosen sun angle with physically accurate shadows, so that splat training and matcher training have realistic, correctly lit images.
 5. As the developer, I want shadows already baked into the orthoimage to be reduced before relighting, so that relit terrain does not show double shadows.
 6. As the developer, I want to train one Gaussian splat scene per sun angle from mesh renders, so that sun angle can vary across simulated descents even though splats bake in lighting.
-7. As the developer, I want to derive three fidelity levels from each splat scene by varying Gaussian count, render resolution, and spherical-harmonic degree, so that I have cheap approximations that track the expensive render.
+7. As the developer, I want cheaper fidelity levels built as variants of the navigator on the shared splat render, so that I have cheap approximations that track the real navigator. (Revised by ADR 0002: splat render knobs save at most about 2% of a descent's cost.)
 8. As the developer, I want the cost of each fidelity level measured on real hardware and recorded with the GPU type, so that estimator sample allocation uses real costs rather than guesses.
 9. As the developer, I want a scripted descent trajectory over Jezero, so that the simulation isolates navigation performance without needing a flight-dynamics simulator.
 10. As the developer, I want each simulated descent to draw random values for true position, altitude, attitude, image noise, blur, exposure, and sun angle, so that the failure estimate reflects variation in operating conditions.
@@ -38,7 +38,7 @@ The navigator is fine-tuned only on terrain from six other Mars regions, so Jeze
 17. As the developer, I want the pretrained, non-fine-tuned matcher evaluated as a baseline, so that I can show how much fine-tuning changed failure probability.
 18. As the developer, I want a single simulation interface that takes random inputs and a fidelity level and returns a navigation error, so that the UQ layer and the tests use the same boundary.
 19. As the developer, I want a pilot study that runs a modest number of samples at all fidelity levels, so that I can measure costs, correlations, and typical error magnitudes.
-20. As the developer, I want the failure threshold r chosen from the pilot study so failure occurs roughly 2–10% of the time, so that a brute-force reference is affordable and the estimator comparison is meaningful.
+20. As the developer, I want the failure threshold r fixed at LVS's 40 m requirement, measured in the map frame, and never tuned to a target failure rate, so that the failure rate is measured rather than chosen. (Revised by ADR 0003; this replaces choosing r for a 2–10% failure rate.)
 21. As the developer, I want failure measured with a smoothed (sigmoid) indicator around r, so that correlation between fidelity levels stays high and multifidelity estimators deliver real savings.
 22. As the developer, I want to report the bias introduced by smoothing as a function of sigmoid steepness, so that the bias-variance tradeoff is explicit.
 23. As the developer, I want mean and variance of navigation error estimated alongside failure probability, so that I have well-behaved supporting results.
@@ -48,7 +48,7 @@ The navigator is fine-tuned only on terrain from six other Mars regions, so Jeze
 27. As the developer, I want each estimator repeated independently as many times as fit within a stated GPU-hour budget, so that I can measure actual estimator spread rather than relying on a single run.
 28. As the developer, I want MXMCPy's predicted variances compared with the empirically observed variances, so that I can report whether the optimizer's promises hold for splat-based fidelity levels.
 29. As the developer, I want failure probability reported as a function of sun angle, so that the effect of lighting mismatch between orbital map and descent image is visible.
-30. As the developer, I want failure probability reported across a range of r values, with the Mars 2020 Lander Vision System's 40 m position-knowledge target marked as a reference line, so that readers see how reliability changes as the requirement tightens and where a real mission requirement falls.
+30. As the developer, I want failure probability reported across a range of r values, labelled exploratory, with r = 40 m (the Mars 2020 Lander Vision System's requirement) marked as the official line, so that readers see how reliability changes as the requirement tightens and where a real mission requirement falls.
 30a. As the developer, I want the orbital map the navigator matches against to be built at CTX-like resolution (downsampled from the HiRISE orthoimage), while descent renders stay HiRISE-derived, so that matching mirrors the real LVS, whose reference map came from the coarser CTX camera.
 31. As the developer, I want the whole pipeline orchestrated by a workflow manager that reruns only missing or failed steps, so that a cluster failure halfway through does not force a restart.
 32. As the developer, I want the same workflow to run locally on my GPU or on the cluster by switching a profile, so that I can develop small and scale up without rewriting.
@@ -77,7 +77,8 @@ The navigator is fine-tuned only on terrain from six other Mars regions, so Jeze
 - The project is a reliability study. The headline contribution is an efficiently estimated, validated failure probability. The navigator only needs to be reasonable; it is the system under test, not the object of innovation.
 - The quantity of interest is navigation position error at the handoff point of a scripted descent. Failure means that error exceeds r. There are no flight dynamics, guidance, or hazard avoidance.
 - The headline statistic is a smoothed failure probability using a sigmoid ramp around r, reported with its smoothing bias. Mean and variance of navigation error are supporting statistics.
-- r is set from the pilot study so failure occurs roughly 2–10% of the time. Results are also reported across a range of r.
+- r = 40 m in the map frame, LVS's requirement (ADR 0003). One whole-map offset between the matching map and the rendered scene is measured independently and removed. Results are also reported across a range of r, labelled exploratory.
+- Every error source in the scenario model is one real landings face, with a sourced size; anything harsher is a labelled stress case (ADR 0003).
 
 **Data**
 
@@ -101,7 +102,7 @@ The navigator is fine-tuned only on terrain from six other Mars regions, so Jeze
 **Splat scene module**
 
 - gsplat trains one splat scene per Jezero sun angle from mesh renders. Sun angle is therefore a discrete random input.
-- Three fidelity levels are derived per scene by varying Gaussian count (pruning), render resolution, and spherical-harmonic degree. All levels share one navigator; low-resolution renders are resized to the navigator's input size.
+- Fidelity levels are navigator variants on the shared full splat render (ADR 0002). Map thinning (top-K map keypoints) was tried and gave no usable cheap level (`docs/benchmarks/fidelity-sweep.md`); how to build cheaper levels is open.
 - If profiling shows the navigator dominates per-sample cost, the fidelity ladder may additionally shrink the navigator. This is a fallback, not the default.
 - Splat scenes are exported in a format the browser renderer reads (PLY or a compressed equivalent).
 
@@ -132,7 +133,7 @@ The navigator is fine-tuned only on terrain from six other Mars regions, so Jeze
 - MXMCPy computes sample allocations, estimates, and predicted variances for MFMC, MLMC, and ACV from pilot-study costs and covariances. MFMC is the headline method in the README; the three-way comparison is the deeper result.
 - Plain Monte Carlo is run at equal compute as the baseline.
 - Validation uses a brute-force high-fidelity reference value and repeated independent trials per estimator. The number of repeats is set by a stated GPU-hour budget after the pilot study, not fixed in advance.
-- Reports predicted versus observed estimator variance, failure probability versus sun angle, failure probability versus r (with the LVS 40 m target marked for reference; r itself is still set from the pilot study), smoothing bias versus steepness, and fine-tuned versus pretrained failure probability.
+- Reports predicted versus observed estimator variance, failure probability versus sun angle, failure probability versus r (exploratory, with the official r = 40 m marked), smoothing bias versus steepness, and fine-tuned versus pretrained failure probability.
 - Selective refinement (Elfverson, Hellman & Målqvist) is a planned comparison to sigmoid smoothing: run the high-fidelity level only for samples whose cheaper-level error lands near r. It is scheduled as a stretch item (see M7), not part of the core milestones.
 
 **Orchestration**
@@ -217,9 +218,9 @@ The navigator is fine-tuned only on terrain from six other Mars regions, so Jeze
 
 - **M1 — Smoke tests.** Mitsuba (CUDA), gsplat, LightGlue with ALIKED, and MXMCPy each run a minimal example on both the local RTX 5070 and at least one CARC GPU type, and a Snakemake workflow submits at least one job through SLURM. Any incompatibility is fixed or documented with a workaround.
 - **M2 — End-to-end plain Monte Carlo ("skateboard").** One command runs one Jezero tile through splat scene, scripted descent, pretrained matcher, and PnP to navigation error, and outputs a plain Monte Carlo failure probability with a confidence interval from a small sample. It also writes a match-visualization image for any chosen descent, the first showable visual of the matcher at work.
-- **M3 — Fidelity ladder and estimator comparison ("scooter").** Three fidelity levels exist with measured per-sample costs. The pilot study produces correlations, r is set from it, and MXMCPy produces MFMC, MLMC, and ACV estimates with predicted variances, compared against plain Monte Carlo at equal cost. M1–M3 together form the first showable result.
+- **M3 — Fidelity ladder and estimator comparison ("scooter").** Cheaper fidelity levels exist with measured per-sample costs. The pilot study produces correlations, the smoothed indicator's steepness is set from it (r is fixed by ADR 0003), and MXMCPy produces MFMC, MLMC, and ACV estimates with predicted variances, compared against plain Monte Carlo at equal cost. M1–M3 together form the first showable result.
 - **M4 — Fine-tuning ("bicycle").** The matcher is fine-tuned on mesh renders of the six training regions, with no Jezero data in training, and failure probability is reported for fine-tuned versus pretrained.
-- **M5 — Lighting and validation ("motorcycle").** 4–6 sun-angle splat scenes exist; a brute-force reference value is computed; estimators are repeated within a stated GPU-hour budget; predicted versus actual variance is reported, along with failure probability versus sun angle and versus r (with the LVS 40 m reference line).
+- **M5 — Lighting and validation ("motorcycle").** 4–6 sun-angle splat scenes exist; a brute-force reference value is computed; estimators are repeated within a stated GPU-hour budget; predicted versus actual variance is reported, along with failure probability versus sun angle and versus r (exploratory, with the official 40 m line).
 - **M6 — Viewer and write-up ("car").** The Spark replay viewer is deployed publicly with precomputed scenario presets and the descent-camera view with its match overlay, plus a highlight video and a README with headline results and cited NASA sources.
 - **M7 — Stretch.** Each item is its own ticket, started only after M6. Rough priority: selective refinement comparison against sigmoid smoothing, pendulum-swing attitude model, C++ flight-style navigation module, map/DTM error, deep ensembles, rare-event methods. Relightable splats remain future work.
 

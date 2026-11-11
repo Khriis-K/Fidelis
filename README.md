@@ -4,7 +4,7 @@
 
 Fidelis (Latin for "faithful") is a Gaussian-splat-based Mars descent simulator. It estimates the failure probability of a vision-based terrain-relative navigation (TRN) system at Jezero Crater, using multifidelity Monte Carlo to keep the estimate affordable, and validates it against a brute-force reference.
 
-> **Status: early development.** Nothing below is built or measured yet. This README describes the planned system. There are no results to report, and numbers will appear here only once they're measured. Progress is tracked in [GitHub Issues](https://github.com/Khriis-K/Fidelis/issues) and [milestones](https://github.com/Khriis-K/Fidelis/milestones).
+> **Status: in development.** Built and measured so far: the Jezero scene, a path-traced renderer, the navigator, a Gaussian splat stand-in for the renderer, and plain Monte Carlo on a local GPU and the USC CARC cluster. The latest run found **no failures in 300 simulated descents** ([`docs/benchmarks/failure-scan.md`](docs/benchmarks/failure-scan.md)). That's because the simulation is kinder than flight: its map and its descent images come from the same photo. Realistic error sources, starting with the real LVS map, are being added one at a time ([ADR 0003](docs/adr/0003-failure-is-40m-in-the-map-frame.md)). Not built yet: cheaper fidelity levels that work (map thinning didn't; [`docs/benchmarks/fidelity-sweep.md`](docs/benchmarks/fidelity-sweep.md)), multifidelity estimation, validation, and the viewer. Steps below describe the planned system unless they say otherwise. Every number lives in [`docs/benchmarks/`](docs/benchmarks/) with its caveats. Progress is tracked in [GitHub Issues](https://github.com/Khriis-K/Fidelis/issues) and [milestones](https://github.com/Khriis-K/Fidelis/milestones).
 
 ## The problem
 
@@ -15,10 +15,10 @@ You can't test-land on Mars, so reliability has to come from thousands of simula
 ## The approach
 
 1. **Build the scene.** Turn public USGS HiRISE elevation data and orthoimagery of Jezero into a textured 3D terrain mesh, rendered with physically correct shadows.
-2. **Make it fast to render.** Train Gaussian splat scenes from the mesh renders, one per sun angle. Derive three fidelity levels from each by varying Gaussian count, render resolution, and spherical-harmonic degree.
+2. **Make it fast to render.** Train Gaussian splat scenes from the mesh renders, one per sun angle. The splat is a faster stand-in for the mesh renderer.
 3. **Fly simulated descents.** Randomize the true position, altitude, camera attitude, image noise, blur, exposure, and sun angle. Every descent is reproducible from its random seed.
-4. **Navigate.** ALIKED keypoints, LightGlue matching against the orbital map, and PnP with RANSAC give a position estimate. Failure means the navigation error at handoff exceeds a threshold *r*.
-5. **Estimate efficiently.** Combine many cheap low-fidelity runs with a few expensive high-fidelity ones using NASA Langley's [MXMCPy](https://github.com/nasa/MXMCPy). Compare multifidelity Monte Carlo (MFMC), multilevel Monte Carlo (MLMC), and approximate control variates (ACV) against plain Monte Carlo at equal compute.
+4. **Navigate.** ALIKED keypoints, LightGlue matching against the orbital map, and PnP with RANSAC give a position estimate. A descent fails if it gets no fix, or if its fix is more than *r* = 40 m off, Perseverance's LVS requirement, measured against the map as LVS was ([ADR 0003](docs/adr/0003-failure-is-40m-in-the-map-frame.md)). Every error source in the random scenario has to be one a real landing faces, with its size taken from a source.
+5. **Estimate efficiently.** Fidelity levels are variants of the navigator on a shared splat render, since matching, not rendering, dominates a descent's cost ([ADR 0002](docs/adr/0002-navigator-fidelity-ladder.md)). Combine many cheap low-fidelity runs with a few expensive high-fidelity ones using NASA Langley's [MXMCPy](https://github.com/nasa/MXMCPy). Compare multifidelity Monte Carlo (MFMC), multilevel Monte Carlo (MLMC), and approximate control variates (ACV) against plain Monte Carlo at equal compute.
 6. **Prove it.** Check every estimator against a brute-force high-fidelity reference over repeated independent trials, and compare MXMCPy's predicted variance with the observed spread.
 7. **Show it.** An interactive web viewer lets visitors fly over the splat terrain, replay individual descents from the descent camera's point of view with the navigator's keypoint matches drawn live, and watch landing-estimate dispersion build up.
 
@@ -48,7 +48,7 @@ You can't test-land on Mars, so reliability has to come from thousands of simula
 |---|---|
 | M1: Smoke tests | Every core library runs on a local GPU and on the cluster |
 | M2: End-to-end plain Monte Carlo | One command goes from a Jezero tile to a failure probability with a confidence interval, plus a match visualization for any descent |
-| M3: Fidelity ladder and estimator comparison | Three fidelity levels, a pilot study, and MFMC, MLMC, and ACV vs. plain Monte Carlo. The first showable result. |
+| M3: Fidelity ladder and estimator comparison | Cheaper fidelity levels (navigator variants), a pilot study, and MFMC, MLMC, and ACV vs. plain Monte Carlo. The first showable result. |
 | M4: Fine-tuning | Fine-tuned vs. pretrained matcher failure probability |
 | M5: Lighting and validation | Multiple sun angles, brute-force reference, predicted vs. observed variance |
 | M6: Viewer and write-up | Public replay viewer centered on the descent-camera view with live match overlay, highlight video, full write-up |
