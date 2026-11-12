@@ -6,7 +6,7 @@ Sourced error 1 of 4 (ADR 0003, decision 6). Until now the navigator matched aga
 
 - **The image is CTX, and only CTX.** `fidelis-lvs-map` (`src/fidelis/terrain/lvs_map.py`) copies the raw CTX mosaic's own pixels under the scene's footprint. It isn't resampled onto the scene's pixel grid, and it isn't brightness-matched to HiRISE. The scene's ring texture is CTX scaled to HiRISE's mean and spread, so that isn't used either. The builder is given only the CTX file, the footprint and the east–west scale, and a test builds the map with every HiRISE-derived raster deleted.
 - **Built on the laptop, 2026-11-11 (CPU, no GPU time):** 4,340 × 4,350 pixels at 6 m, 0 nodata pixels, over map x 4,577,803–4,603,903 m and y 1,080,293–1,106,333 m.
-- **The old map stays.** `matching_map.source` in `config/jezero.yaml` picks `ctx` (now the default) or `scene`. `fidelis-plain-mc --matching-map scene` reruns on the old map, with its zero offset and the scene's elevation. Every record now names its map.
+- **The old map stays.** `matching_map.source` in `config/jezero.yaml` picks `ctx` (now the default) or `scene`. `fidelis-plain-mc --matching-map scene` reruns on the old map, with its zero offset and the scene's elevation. Every record now names its map. The workflow's `plain_mc`, `plain_mc_splat`, `plain_mc_mesh_pinned` and `match_viz` rules are pinned to the old map: they made the earlier results on seeds 0–19, and on the CTX map they would overwrite those and spend seeds this scan must not have seen.
 
 ### Elevation: the CTX DTM (decided here)
 
@@ -78,9 +78,25 @@ Sourced error 1 of 4 (ADR 0003, decision 6). Until now the navigator matched aga
 
 `failure-scan.md` and `fidelity-sweep.md` record 70,749 keypoints on the old map, against 70,726 in `descent-profile.md`, `plain-mc.md` and `docs/carc.md`. **It is the GPU model, not the map or the code.** The same map file, with today's code, gives 70,726 on the laptop's RTX 5070 and 70,749 on the laptop's CPU, the A40's number (measured 2026-11-11). The 70,726 was measured on the laptop on 2026-11-02 and later quoted for the cluster runs. The A40 records are the ones that count 70,749.
 
+    uv run python scripts/check_map_keypoints.py data/jezero/matching_map/map.tif cuda cpu
+
 Where the difference comes from: the map is extracted in 25 tiles, each capped at 4,096 keypoints. Ten tiles hit the cap on both devices. The other fifteen keep however many points pass ALIKED's detector, and twelve of them differ between the two devices by 1 to 11 keypoints (some up, some down, 23 in all). That fits last-digit differences in the network's arithmetic tipping borderline points over the detection threshold, in line with ADR 0001 (GPU results repeat at image level, not bit for bit). The exact mechanism inside ALIKED wasn't traced. Whether the cluster's map file is byte-identical to the laptop's also wasn't checked. It doesn't need to be for this explanation, since one file gives both numbers.
 
 What it means: keypoint counts, and so fixes, differ slightly between GPU models. That's one more reason costs and results are pinned to one GPU type.
+
+## Smoke test on the laptop (after the plan was committed; not a result)
+
+Run on 2026-11-11, after the plan above was committed (`6729dd7`), to check the plumbing end to end. Four descents, seeds 30,000–30,003 (outside the scan's, and now used), mesh renderer, RTX 5070 Laptop GPU, the map **thinned to its 8,000 highest-scoring keypoints** because the laptop can't hold the full map's matching. So this is not the real navigator, not the pinned GPU, and four descents: it says the code runs, and nothing about a failure rate.
+
+| Seed | Sun | CTX map: inliers | CTX map: error, map frame | Old map: inliers | Old map: error |
+|---|---|---|---|---|---|
+| 30000 | 1 | 154 | 7.03 m | 150 | 5.44 m |
+| 30001 | 4 | 189 | 3.76 m | 203 | 2.75 m |
+| 30002 | 2 | 247 | 4.13 m | 241 | 1.29 m |
+| 30003 | 3 | 227 | 6.47 m | 215 | 4.21 m |
+
+- **All eight got a fix**, with similar inlier counts on both maps.
+- **The fixes moved the way the offset says, but about twice as far.** Against the same seed on the old map, the true-frame error moved by a mean of about +4.0 m east and −3.1 m north (east +1.3 to +5.6 m, north −1.1 to −5.8 m). The measured offset is +1.89 m east, −1.49 m north. Same direction, so the sign convention holds. The size is not explained: four descents on a thinned map can't tell a navigator bias (CTX's own lighting, CTX heights) from an offset that is larger than #40 measured, and the offset is never set from descent results (ADR 0003). The planned "mean true-frame error vector, next to the offset" and the control answer it on 300 descents.
 
 ## Results
 

@@ -44,13 +44,13 @@ def main() -> int:
     parser.add_argument("out", type=Path)
     args = parser.parse_args()
 
-    resolutions = yaml.safe_load(args.config.read_text(encoding="utf-8"))["matching_map"]
-    lvs_m = resolutions["lvs_map_resolution"]["value_m"]
+    lvs_resolution = yaml.safe_load(args.config.read_text(encoding="utf-8"))["matching_map"]["lvs_map_resolution"]
+    lvs_m = lvs_resolution["value_m"]
     with rasterio.open(args.ctx_ortho) as src:
         require_same_resolution(lvs_m, src.res[0])
     bounds = tuple(json.loads((args.scene_dir / "ring.json").read_text())["bounds"])
     info = build_lvs_map(args.ctx_ortho, bounds, args.out)
-    info["lvs_map_resolution"] = resolutions["lvs_map_resolution"]
+    info["lvs_map_resolution"] = lvs_resolution
     # Pixels are square in map metres, not on the ground (see fidelis.terrain.matching_map).
     scale = json.loads((args.scene_dir / "tile.json").read_text())["east_west_ground_scale"]
     info["east_west_ground_scale"] = scale

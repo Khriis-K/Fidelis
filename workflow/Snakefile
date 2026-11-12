@@ -31,11 +31,15 @@ def config_values(*keys):
 MAP_RESOLUTIONS = {
     key: config["matching_map"][key]["value_m"] for key in ("lvs_map_resolution", "ctx_ground_resolution")
 }
-# What fidelis-plain-mc and fidelis-match-viz read: the sampler, the simulator, the run,
-# and which map the navigator matches against.
-MC_CONFIG = config_values("plain_mc", "map_offset", "scenario", "simulation", "suns", "tile", "scene") | {
-    "matching_map": config["matching_map"]["source"]
-}
+# What fidelis-plain-mc and fidelis-match-viz read: the sampler, the simulator, the run.
+# Not map_offset or matching_map.source: the Monte Carlo rules below are pinned to the scene's
+# own map (OLD_MAP), whose offset is zero by construction.
+MC_CONFIG = config_values("plain_mc", "scenario", "simulation", "suns", "tile", "scene")
+# The plain_mc* and match_viz rules made the results from before #36, on seeds 0-19, against
+# the scene's own map. They stay on it: on the CTX map they would overwrite those results and
+# spend seeds the CTX scans must not have seen. Scans on the CTX map are pre-registered and
+# run by hand (docs/benchmarks/ctx-map-scan.md).
+OLD_MAP = "--matching-map scene"
 
 
 JEZERO = "data/jezero"
@@ -236,7 +240,7 @@ rule plain_mc:
         mem_mb=16000,
         runtime=60,
     shell:
-        f"fidelis-plain-mc config/jezero.yaml {JEZERO} results/plain_mc"
+        f"fidelis-plain-mc config/jezero.yaml {JEZERO} results/plain_mc {OLD_MAP}"
 
 
 # The splat scene (#9): mesh renders from descent-camera views under one sun, then a
@@ -319,7 +323,7 @@ rule plain_mc_splat:
     envmodules:
         *CUDA_MODULES,
     shell:
-        f"fidelis-plain-mc config/jezero.yaml {JEZERO} results/plain_mc_splat --fidelity splat --sun-index {SPLAT_SUN}"
+        f"fidelis-plain-mc config/jezero.yaml {JEZERO} results/plain_mc_splat --fidelity splat --sun-index {SPLAT_SUN} {OLD_MAP}"
 
 
 # The same seeds on the mesh, under the same pinned sun: plain_mc mixes all five suns, so
@@ -340,7 +344,7 @@ rule plain_mc_mesh_pinned:
         runtime=60,
     shell:
         f"fidelis-plain-mc config/jezero.yaml {JEZERO} results/plain_mc_mesh_pinned --fidelity mesh"
-        f" --sun-index {SPLAT_SUN}"
+        f" --sun-index {SPLAT_SUN} {OLD_MAP}"
 
 
 # The match picture for any seed, rerun from the config:
@@ -361,4 +365,4 @@ rule match_viz:
         mem_mb=16000,
         runtime=20,
     shell:
-        f"fidelis-match-viz config/jezero.yaml {JEZERO} {{wildcards.seed}} {{output}}"
+        f"fidelis-match-viz config/jezero.yaml {JEZERO} {{wildcards.seed}} {{output}} {OLD_MAP}"

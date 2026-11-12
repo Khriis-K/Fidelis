@@ -12,7 +12,7 @@ ADR 0002 makes the cheaper levels map-thinned navigators, `splat-k<K>`: the same
 - **Seeds.** Selection uses seeds 0–199. Holdout uses seeds 200–299, kept for one confirmation check and never used to choose. Every level runs every seed.
 - **Scene.** Splat under sun 0 (`--sun-index 0`), the only sun with a trained splat.
 - **Hardware.** One SLURM job on one **NVIDIA A40**. The GPU type was pinned on 2026-11-11, before any sweep run (`docs/carc.md`). All eight runs go one after another in that job, on the same GPU, so the levels' costs aren't split across nodes. If the job doesn't fit the debug partition's 1 h limit, it runs on the `gpu` partition instead, still on one A40.
-- **Commands.** One `fidelis-plain-mc config/jezero.yaml data/jezero results/fidelity_sweep/<level> --fidelity <level> --sun-index 0 --first-seed 0 --samples 300` per level. Seeds 200–299 are split off afterwards when the records are read.
+- **Commands.** One `fidelis-plain-mc config/jezero.yaml data/jezero results/fidelity_sweep/<level> --fidelity <level> --sun-index 0 --first-seed 0 --samples 300` per level. Seeds 200–299 are split off afterwards when the records are read. (Since #36 the default map is the CTX map, so rerunning this sweep as it was needs `--matching-map scene` added.)
 - **Rough cost (an estimate, not a measurement).** The real navigator took 0.32 s per descent on an A40. Thinned levels should cost less. So 8 levels × 300 seeds is at most about 13 minutes of descents, plus a minute or two per process to load the splat and extract the map: well under an hour on one GPU.
 
 ### What each level is scored on
