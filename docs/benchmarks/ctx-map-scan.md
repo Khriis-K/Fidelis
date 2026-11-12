@@ -100,4 +100,58 @@ Run on 2026-11-11, after the plan above was committed (`6729dd7`), to check the 
 
 ## Results
 
-Not run yet.
+**Run on 2026-11-12.** SLURM job 14062475, debug partition, node b11-09, one NVIDIA A40, 5 min 23 s for the scan and the control together (`sacct`). At 24 SUs per minute that is about 129 SUs [Computed]. All 300 seeds ran in both. Every record carries config SHA-256 `0b55b9c9…`, which matches the committed `config/jezero.yaml` at `cfc9b05`. Median cost was 0.443 s per descent on the CTX map (max 0.791 s) and 0.476 s on the old map.
+
+**One departure from the plan.** The scan and the control ran one after the other inside a single `sbatch` job, not as two `srun` commands, because no A40 was free and a batch job can wait in the queue. Same partition, GPU type, CPUs, memory, seeds and commands. Nothing else departed.
+
+### Headline
+
+**0 failures in 300 against the real LVS map, at r = 40 m in the map frame: 0 no-fix, 0 beyond r. P(fail) = 0, 95% Wilson interval [0, 0.0126].** Offset removed: +1.89 m east, −1.49 m north. Every descent got a fix; the fewest inliers in any descent was 691. The worst descent (seed 20074, sun 3) was **10.02 m** off, a quarter of r.
+
+### By sun (planned): map-frame error against the CTX map
+
+| Sun | Az, el | Descents | No fix | Beyond r | Median | 90th pct | Max |
+|---|---|---|---|---|---|---|---|
+| 0 | 257°, 40° | 65 | 0 | 0 | 4.27 m | 5.34 m | 6.47 m |
+| 1 | 240°, 25° | 54 | 0 | 0 | 6.65 m | 8.10 m | 9.05 m |
+| 2 | 240°, 55° | 62 | 0 | 0 | 3.31 m | 4.94 m | 6.54 m |
+| 3 | 310°, 25° | 69 | 0 | 0 | 6.58 m | 8.31 m | 10.02 m |
+| 4 | 310°, 55° | 50 | 0 | 0 | 2.42 m | 4.59 m | 5.63 m |
+| All | | 300 | 0 | 0 | 4.53 m | 7.70 m | 10.02 m |
+
+### Against the control (planned): the same seeds on the old map
+
+**The control is clean, so the new code didn't break the old path.** 0 failures in 300 (0 no-fix, 0 beyond r), with per-sun medians of 1.71–5.05 m and a worst descent of 7.06 m. The failure scan, on other seeds, gave 1.57–4.84 m and 6.70 m.
+
+| Sun | Control median | Control 90th pct | Control max |
+|---|---|---|---|
+| 0 | 2.41 m | 2.83 m | 3.46 m |
+| 1 | 4.39 m | 5.44 m | 5.80 m |
+| 2 | 1.71 m | 2.21 m | 2.53 m |
+| 3 | 5.05 m | 6.28 m | 7.06 m |
+| 4 | 1.92 m | 2.49 m | 2.89 m |
+| All | 2.55 m | 5.40 m | 7.06 m |
+
+- **The real map made the error about 1.8 times larger.** The median went from 2.55 m to 4.53 m, and the worst from 7.06 m to 10.02 m.
+- **Seed for seed, the error grew in 267 of 300 descents**, by a mean of 1.61 m (median 1.66 m; 10th to 90th percentile −0.18 to +3.45 m; extremes −4.64 and +4.69 m).
+- **Hard descents stay hard.** The rank correlation between a seed's error on the two maps is 0.71. The low suns (1 and 3) are still the worst on both.
+- **Fewer matches, with plenty to spare.** Median inliers fell from 1,938 to 1,411, and the minimum from 1,142 to 691.
+
+### Exploratory (not planned as tests; labelled as such)
+
+- **At the old 12 m line: 0 of 300 in the map frame.** In the true frame (offset left in) one descent passes 12 m, at 12.12 m.
+- **The fixes moved further east than the measured offset says.** The paired shift in the true-frame error, CTX minus control on the same seed, averages **+3.25 m east, −1.39 m north** (standard errors 0.09 and 0.10 m). The measured offset is +1.89 m east, −1.49 m north (±0.4 / ±0.6 m). North agrees. East is about 1.4 m more, and that gap is the same under every sun (east shift 2.91–3.90 m by sun), so it comes from the map, not the render's lighting. Two readings fit, and this scan can't separate them: the registration under-measured the east offset (its write-up warns that lighting differences between the two orbital images can look like an offset), or the navigator is biased by how CTX's own shadows sit against the render's. **The offset is not changed** (ADR 0003: never set from descent results). Left in, the extra 1.4 m is 3% of r.
+- **The 4-descent smoke test overstated it.** It suggested twice the offset on both axes. On 300 descents the north shift matches the offset and the east shift is 1.7 times it.
+- **Scatter roughly doubled.** Around each sun's mean error vector, descents scatter by 1.90–2.65 m rms on the CTX map, against 0.78–1.40 m on the old one. So the map added both a steady shift and real descent-to-descent spread.
+- **Height.** The mean height error went from −0.54 m to +0.35 m, a shift of +0.89 m, the same sign as the CTX DTM sitting a median 0.32 m above HiRISE's. Horizontal error dominates: median 4.37 m horizontal against 0.73 m vertical (largest vertical 4.27 m).
+- **Nothing else matters much.** Spearman rank correlation of the CTX error with each drawn input: tilt 0.15, exposure gain −0.14, altitude −0.08, blur −0.07, noise 0.06, distance from the tile centre −0.04. The fifth of descents farthest from the centre (beyond 1.9 km, where views reach the CTX ring most) have a median of 4.76 m against 4.39 m for the rest, so the ring caveat above isn't visible.
+- **The worst eight are all low-sun descents** (suns 1 and 3, 8.76–10.02 m). Their errors on the old map were 4.82–5.82 m.
+- **Map keypoints on the A40: 58,866** on the CTX map and 70,749 on the old one. The laptop's CPU gave 58,860 and its GPU 58,827 on the CTX map, so the A40 matches neither exactly here.
+
+### What it means
+
+The plan's "0 failures" branch applies. Matching against the real LVS map, with different imagery, dates, lighting and coarser heights, makes fixes about 1.8 times less accurate and does not make the navigator fail. The worst of 300 is 10 m against a 40 m line. The error is still a steady offset (per sun, plus about 3.5 m from the map) with 2–3 m of scatter, so more descents of this kind are unlikely to cross 40 m (an inference from the spread, not a test of the tails).
+
+The "many failures" worry, that Fidelis's relit HiRISE renders might look too unlike CTX to match at all, did not happen: every descent matched, with at least 691 inliers. That doesn't show the renders look like real descent images. It shows the matcher copes with the HiRISE-to-CTX gap.
+
+Next is #37 (dust haze), as ADR 0003 orders it, whatever this count was. Haze is the first remaining error that attacks matching itself (contrast) instead of shifting a good fix. With the map in, the realistic model's worst case stands at a quarter of r, so whether the full set produces any failures at 40 m is an open question, and ADR 0003's deferred decision 7 (stress cases) may come back.
