@@ -252,6 +252,33 @@ The training log is `.snakemake/slurm_logs/rule_splat_train/<jobid>.log`; its la
 srun --account=irahbari_1147 --partition=gpu --gres=gpu:l40s:1 -c 4 --mem 32G -t 30 bash -c "module purge && module load ver/2607 gcc/15.3.0 cuda/13.0.3 && uv run --no-sync pytest -m gpu tests/test_simulation_splat.py -v"
 ```
 
+## CTX map scan on CARC (#36)
+
+The navigator now matches against the real LVS map, which the workflow builds as `data/jezero/lvs_map/map.tif` (`jezero_lvs_map`, CPU only, on `main`). The scan and its control are pre-registered in `docs/benchmarks/ctx-map-scan.md`; run them only as written there.
+
+- **New command, so sync first.** This adds `fidelis-lvs-map` to `[project.scripts]`. Without `uv sync` the map job fails with "command not found", as `splat_views` once did.
+- **The map first.** The dry run should plan `jezero_lvs_map` and nothing else. If it plans scene or mesh steps too, stop: those outputs have no recorded params ("Config edits and reruns"), and a rebuild would change the scene under the scan.
+- **Cost (reserved, upper bounds):** the map job is 1 CPU and 4 GB on `main` for about a minute, a few SUs. Each scan job reserves 1 A40, 8 CPUs and 32 GB, 24 SUs per minute: at most 720 SUs at the 30-minute limit. The failure scan's descents took a median 0.479 s on an A40, so about 5 minutes and 100–150 SUs each is the estimate.
+
+```bash
+cd /project2/irahbari_1147/ckuizon/fidelis
+git pull
+uv sync --dry-run
+uv sync
+uv run --no-sync snakemake --profile profiles/carc data/jezero/lvs_map/map.tif -n
+uv run --no-sync snakemake --profile profiles/carc data/jezero/lvs_map/map.tif
+cat data/jezero/lvs_map/map.json
+```
+
+`map.json` should give a shape of `[4340, 4350]` and `"nodata_pixels": 0`, as on the laptop. Then the scan, and the control on the old map (same seeds):
+
+```bash
+srun --account=irahbari_1147 --partition=debug --gres=gpu:a40:1 -c 8 --mem 32G -t 30 bash -c "module purge && module load ver/2607 gcc/15.3.0 cuda/13.0.3 && uv run --no-sync fidelis-plain-mc config/jezero.yaml data/jezero results/ctx_map_scan --fidelity mesh --first-seed 20000 --samples 300"
+srun --account=irahbari_1147 --partition=debug --gres=gpu:a40:1 -c 8 --mem 32G -t 30 bash -c "module purge && module load ver/2607 gcc/15.3.0 cuda/13.0.3 && uv run --no-sync fidelis-plain-mc config/jezero.yaml data/jezero results/ctx_map_scan_control --fidelity mesh --first-seed 20000 --samples 300 --matching-map scene"
+```
+
+Each prints its estimate on the last line and writes `records.jsonl` and `estimate.json` into its results folder.
+
 ## Config edits and reruns
 
 Every rule that reads `config/jezero.yaml` takes it as `ancient()`, so the file's timestamp never reruns anything, and lists the values it actually reads as `params`. Snakemake reruns a rule when its params change. So a comment edit, or a change to another rule's setting, reruns nothing; changing `tile.size_m` reruns the scene and everything after it; changing `splat.steps` reruns training. Before this, any config edit rebuilt the whole scene: that's why the first `splat` run (2026-11-02) also reran `jezero_tile`, `jezero_scene`, `jezero_mesh` and `jezero_matching_map`.

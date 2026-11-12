@@ -86,7 +86,7 @@ The navigator is fine-tuned only on terrain from six other Mars regions, so Jeze
 - Training regions are six official HiRISE stereo DTMs from former or actual landing sites: Gale Crater, Holden Crater, Eberswalde Crater, Mawrth Vallis, Gusev Crater, and Elysium Planitia. Exact DTM product IDs are confirmed at download time.
 - Only official stereo-derived DTMs are used, so DTM production method is consistent between training and test. Shape-from-shading DTMs (such as some Oxia Planum products) are excluded.
 - A geographic buffer around Jezero is excluded from training, including Nili Fossae, Northeast Syrtis, and the wider MSR mosaic area.
-- The orbital map used for matching is the HiRISE orthoimage downsampled to CTX-like resolution, mirroring the real Mars 2020 LVS reference map, which was built from MRO Context Camera (CTX) imagery. Descent renders remain HiRISE-derived, so the map is coarser than the descent views, as in flight. The same downsampling applies to training-region maps used for fine-tuning.
+- The orbital map used for matching is the HiRISE orthoimage downsampled to CTX-like resolution, mirroring the real Mars 2020 LVS reference map, which was built from MRO Context Camera (CTX) imagery. Descent renders remain HiRISE-derived, so the map is coarser than the descent views, as in flight. The same downsampling applies to training-region maps used for fine-tuning. **Superseded for the Jezero test scene by ADR 0003 and #36:** the navigator matches against the real CTX orthomosaic, with CTX elevation. The downsampled map is kept so earlier results reproduce.
 
 **Terrain ingestion module**
 

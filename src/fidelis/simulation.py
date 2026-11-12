@@ -19,6 +19,11 @@ Each record also carries the map-frame error: the error less the whole-map offse
 the matching map and the scene, read from the scene config (fidelis.map_frame, ADR 0003).
 The true-frame error stays alongside it.
 
+The navigator matches against the map the scene config names (`matching_map.source`): the
+real LVS map, CTX imagery with CTX elevation (#36), or the scene's own map, kept so earlier
+results reproduce. The true camera is placed above the scene's terrain either way: the
+truth can't depend on what the navigator's map believes the ground height is.
+
 The navigator gets the true attitude: attitude-knowledge (IMU) error isn't modelled
 (issue #34, docs/benchmarks/navigator.md).
 """
@@ -34,9 +39,9 @@ import numpy as np
 import torch
 import yaml
 
-from fidelis.map_frame import MapOffset, load_map_offset, map_frame_error
+from fidelis.map_frame import MapOffset, load_map_offset, map_frame_error, matching_map_source
 from fidelis.nav.navigator import Navigator, NavResult
-from fidelis.nav.orbital_map import load_orbital_map
+from fidelis.nav.orbital_map import OrbitalMap, load_lvs_map, load_orbital_map, load_terrain
 from fidelis.render.camera import CameraPose, Intrinsics, look_at
 from fidelis.render.degrade import camera_image
 from fidelis.scenario import Scenario
@@ -96,6 +101,10 @@ class SimulationRecord:
     map_offset_source: str | None = None
     map_frame_error_vector: list[float] | None = None  # error_vector less the offset
     map_frame_error_m: float | None = None  # its length
+    # The map the navigator matched against: "ctx" (the real LVS map) or "scene" (the scene's
+    # own). None in records from before #36, which all used the scene's own, and from a
+    # simulator built without a scene config (tests).
+    matching_map: str | None = None
 
 
 @dataclass(frozen=True)
@@ -113,12 +122,18 @@ class Simulator:
         intrinsics: Intrinsics,
         config_sha256: str | None = None,
         map_offset: MapOffset = NO_OFFSET,
+        ground_height: Callable[[float, float], float] | None = None,
+        matching_map: str | None = None,
     ):
         self.renderers = renderers
         self.navigator = navigator
         self.intrinsics = intrinsics
         self.config_sha256 = config_sha256
         self.map_offset = map_offset
+        # The scene's true ground height beneath (east, north). Without one, the map's own
+        # DTM is the scene's (tests, and the scene's own map).
+        self.ground_height = ground_height or navigator.map.ground_height
+        self.matching_map = matching_map
         self._thinned: dict[int, Navigator] = {}
         self.gpu = torch.cuda.get_device_name() if navigator.device.startswith("cuda") else "cpu"
 
@@ -127,7 +142,7 @@ class Simulator:
         if renderer_name not in self.renderers:
             raise ValueError(f"unknown fidelity {fidelity!r}; this simulator has {sorted(self.renderers)}")
         navigator = self._navigator(map_keypoints)
-        ground_z = navigator.map.ground_height(scenario.offset_east_m, scenario.offset_north_m)
+        ground_z = self.ground_height(scenario.offset_east_m, scenario.offset_north_m)
         pose = scenario_pose(scenario, ground_z)
         renderer = self.renderers[renderer_name]
         if hasattr(renderer, "use_sun"):
@@ -164,6 +179,7 @@ class Simulator:
             map_offset_source=self.map_offset.source,
             map_frame_error_vector=in_map,
             map_frame_error_m=None if in_map is None else float(np.linalg.norm(in_map)),
+            matching_map=self.matching_map,
         )
         return Run(record, image, nav)
 
@@ -186,14 +202,31 @@ def parse_fidelity(fidelity: str) -> tuple[str, int | None]:
     return renderer, int(k)
 
 
+def load_matching_map(data_dir: Path, source: str) -> OrbitalMap:
+    """The workflow's matching map by name: "ctx", the LVS map with CTX elevation, or "scene", the scene's own."""
+    data_dir = Path(data_dir)
+    mesh_json = data_dir / "mesh" / "mesh.json"
+    if source == "ctx":
+        return load_lvs_map(data_dir / "lvs_map" / "map.tif", data_dir / "scene" / "ring_dtm.tif", mesh_json)
+    if source == "scene":
+        return load_orbital_map(data_dir / "matching_map" / "map.tif", data_dir / "scene" / "dtm.tif", mesh_json)
+    raise ValueError(f"unknown matching map {source!r}; expected 'ctx' or 'scene'")
+
+
 def build_simulator(
-    config_path: Path, data_dir: Path, fidelities=("mesh",), suns=None, device: str = "cuda"
+    config_path: Path,
+    data_dir: Path,
+    fidelities=("mesh",),
+    suns=None,
+    device: str = "cuda",
+    matching_map: str | None = None,
 ) -> Simulator:
-    """Jezero at the asked fidelities, the CTX-like map, its offset, and LCAM, from the scene config and workflow data.
+    """Jezero at the asked fidelities, the matching map, its offset, and LCAM, from the scene config and workflow data.
 
     "mesh" path-traces the mesh under any of the config's suns; `suns` overrides them (a
     test's zenith sun, say). "splat" renders the splat scene of each sun that has one in
-    data_dir/splat/sun<i>/ (`snakemake splat`).
+    data_dir/splat/sun<i>/ (`snakemake splat`). `matching_map` overrides the config's
+    `matching_map.source`; "scene" reruns earlier results on the map they used.
     """
     scene = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
     data_dir = Path(data_dir)
@@ -214,13 +247,18 @@ def build_simulator(
             renderers["splat"] = SplatRenderer({i: p for i, p in checkpoints.items() if p.exists()}, device=device)
         else:
             raise ValueError(f"unknown fidelity {fidelity!r}; expected 'mesh' or 'splat', maybe with '-k<K>'")
-    orbital_map = load_orbital_map(
-        data_dir / "matching_map" / "map.tif", data_dir / "scene" / "dtm.tif", data_dir / "mesh" / "mesh.json"
-    )
+    source = matching_map or matching_map_source(scene)
     intrinsics = Intrinsics.from_fov(LCAM_PX, LCAM_PX, scene["scenario"]["camera_fov_deg"])
-    navigator = Navigator(orbital_map, device=device)
+    navigator = Navigator(load_matching_map(data_dir, source), device=device)
+    terrain = load_terrain(data_dir / "scene" / "dtm.tif", data_dir / "mesh" / "mesh.json")
     return Simulator(
-        renderers, navigator, intrinsics, config_sha256=sha256_of(config_path), map_offset=load_map_offset(scene)
+        renderers,
+        navigator,
+        intrinsics,
+        config_sha256=sha256_of(config_path),
+        map_offset=load_map_offset(scene, source),
+        ground_height=terrain.ground_height,
+        matching_map=source,
     )
 
 

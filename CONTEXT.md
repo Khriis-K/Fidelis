@@ -28,6 +28,10 @@ _Avoid_: Miss (unqualified), r chosen for a 2–10% rate
 Positions measured relative to the matching map, after removing one whole-map offset between the map and the rendered scene. The offset is measured independently, by registering the two orbital images, and reported on its own.
 _Avoid_: True frame (when meaning this), map-corrected error
 
+**LVS map**:
+The map the real navigator matches against: USGS's CTX orthomosaic on its own pixels, with elevation from the CTX DTM. Nothing HiRISE-derived goes into it. The **scene's own map** (the rendered orthoimage, block-averaged) is the old one, kept only to rerun earlier results.
+_Avoid_: CTX-like map (that is the old one), matching map (unqualified, when the difference matters)
+
 **Sourced error**:
 An error source added to the scenario model because real landings face it, with its size quoted from a source. Anything harsher is a **stress case** and is never reported as the realistic failure rate.
 _Avoid_: Difficulty knob, lever (in write-ups)
