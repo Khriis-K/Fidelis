@@ -97,7 +97,8 @@ matching_map:
   #          from the scene is map_offset, at the end of this file.
   #   scene  the old map: the orthoimage the scene renders, averaged down to the LVS map's
   #          resolution, with the scene's own elevation. Its offset is zero by construction.
-  #          Every result before #36 used it; `fidelis-plain-mc --matching-map scene` reruns them.
+  #          Every result before #36 used it; `fidelis-plain-mc --matching-map scene` reruns them,
+  #          and the workflow's plain_mc* and match_viz rules are pinned to it.
   source: ctx
   lvs_map_resolution:
     value_m: 6.0

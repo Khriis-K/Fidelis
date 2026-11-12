@@ -205,7 +205,7 @@ This doesn't pin the A100 memory size (40 or 80 GB). The smoke test isn't timed,
 
 ## Plain Monte Carlo on CARC
 
-The wide scene (#33) doesn't fit the laptop: its matching map gives 70,726 keypoints (14,290 on the 10 km tile; measured 2026-11-02), and LightGlue ran out of the RTX 5070's 8 GB matching a descent image against them. The `plain_mc` rule is pinned to `l40s` (48 GB) in `profiles/carc`.
+The wide scene (#33) doesn't fit the laptop: its matching map gives 70,726 keypoints on the laptop's GPU (14,290 on the 10 km tile; measured 2026-11-02; the A40 counts 70,749 on the same map, `docs/benchmarks/ctx-map-scan.md`), and LightGlue ran out of the RTX 5070's 8 GB matching a descent image against them. The `plain_mc` rule is pinned to `l40s` (48 GB) in `profiles/carc`.
 
 - **Weights first, on the login node.** ALIKED and LightGlue download their weights from GitHub on first use (`torch.hub.load_state_dict_from_url` in `lightglue/aliked.py` and `lightglue/lightglue.py`), and compute nodes have no internet. Building both models once on the login node caches `aliked-n16.pth` and `aliked_lightglue_v0-1_arxiv.pth` in `~/.cache/torch/hub/checkpoints`, where the job finds them. CPU only, a few seconds.
 - **One BLAS thread on the login node.** Without `OPENBLAS_NUM_THREADS=1`, OpenBLAS starts a thread per CPU it sees (32 on `discovery1`). Threads count against the login node's 64-process limit, so `pthread_create` failed from thread 22 on and the `cv2` import hung (2026-11-02). The `RLIMIT_NPROC 1546766` in its message is the ulimit, not the cap that was hit. `OMP_NUM_THREADS=1` does the same for torch's OpenMP pool.
@@ -254,7 +254,7 @@ srun --account=irahbari_1147 --partition=gpu --gres=gpu:l40s:1 -c 4 --mem 32G -t
 
 ## CTX map scan on CARC (#36)
 
-The navigator now matches against the real LVS map, which the workflow builds as `data/jezero/lvs_map/map.tif` (`jezero_lvs_map`, CPU only, on `main`). The scan and its control are pre-registered in `docs/benchmarks/ctx-map-scan.md`; run them only as written there.
+The navigator now matches against the real LVS map, which the workflow builds as `data/jezero/lvs_map/map.tif` (`jezero_lvs_map`, CPU only, on `main`). The scan and its control are pre-registered in `docs/benchmarks/ctx-map-scan.md`; run them only as written there. The workflow's own Monte Carlo rules (`plain_mc`, `plain_mc_splat`, `plain_mc_mesh_pinned`, `match_viz`) stay on the old map, so they still reproduce the earlier results and can't spend the old seeds on the new map.
 
 - **New command, so sync first.** This adds `fidelis-lvs-map` to `[project.scripts]`. Without `uv sync` the map job fails with "command not found", as `splat_views` once did.
 - **The map first.** The dry run should plan `jezero_lvs_map` and nothing else. If it plans scene or mesh steps too, stop: those outputs have no recorded params ("Config edits and reruns"), and a rebuild would change the scene under the scan.

@@ -39,7 +39,13 @@ import numpy as np
 import torch
 import yaml
 
-from fidelis.map_frame import MapOffset, load_map_offset, map_frame_error, matching_map_source
+from fidelis.map_frame import (
+    MapOffset,
+    checked_matching_map,
+    load_map_offset,
+    map_frame_error,
+    matching_map_source,
+)
 from fidelis.nav.navigator import Navigator, NavResult
 from fidelis.nav.orbital_map import OrbitalMap, load_lvs_map, load_orbital_map, load_terrain
 from fidelis.render.camera import CameraPose, Intrinsics, look_at
@@ -206,11 +212,9 @@ def load_matching_map(data_dir: Path, source: str) -> OrbitalMap:
     """The workflow's matching map by name: "ctx", the LVS map with CTX elevation, or "scene", the scene's own."""
     data_dir = Path(data_dir)
     mesh_json = data_dir / "mesh" / "mesh.json"
-    if source == "ctx":
+    if checked_matching_map(source) == "ctx":
         return load_lvs_map(data_dir / "lvs_map" / "map.tif", data_dir / "scene" / "ring_dtm.tif", mesh_json)
-    if source == "scene":
-        return load_orbital_map(data_dir / "matching_map" / "map.tif", data_dir / "scene" / "dtm.tif", mesh_json)
-    raise ValueError(f"unknown matching map {source!r}; expected 'ctx' or 'scene'")
+    return load_orbital_map(data_dir / "matching_map" / "map.tif", data_dir / "scene" / "dtm.tif", mesh_json)
 
 
 def build_simulator(

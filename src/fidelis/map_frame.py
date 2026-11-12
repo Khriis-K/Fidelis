@@ -40,7 +40,8 @@ SCENE_MAP_OFFSET = MapOffset(
 )
 
 
-def _checked(source: str) -> str:
+def checked_matching_map(source: str) -> str:
+    """`source` if it names a matching map, else a ValueError."""
     if source not in MATCHING_MAPS:
         raise ValueError(f"unknown matching map {source!r}; expected one of {MATCHING_MAPS}")
     return source
@@ -48,7 +49,7 @@ def _checked(source: str) -> str:
 
 def matching_map_source(scene: dict) -> str:
     """Which map the scene config has the navigator match against: "ctx" or "scene"."""
-    return _checked(scene["matching_map"]["source"])
+    return checked_matching_map(scene["matching_map"]["source"])
 
 
 def load_map_offset(scene: dict, source: str | None = None) -> MapOffset:
@@ -60,7 +61,7 @@ def load_map_offset(scene: dict, source: str | None = None) -> MapOffset:
     """
     if source is None and "source" in scene.get("matching_map", {}):
         source = matching_map_source(scene)
-    if source is not None and _checked(source) == "scene":
+    if source is not None and checked_matching_map(source) == "scene":
         return SCENE_MAP_OFFSET
     entry = scene["map_offset"]
     source = str(entry.get("source") or "").strip()

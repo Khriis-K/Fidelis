@@ -17,6 +17,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from fidelis.map_frame import MATCHING_MAPS
+
 INLIER_BGR = (0, 200, 0)
 OUTLIER_BGR = (0, 0, 230)
 KEYPOINT_BGR = (255, 160, 0)  # keypoints with no match
@@ -72,6 +74,11 @@ def main() -> int:
     parser.add_argument("out", type=Path, help="a .png")
     parser.add_argument("--fidelity", default="mesh")
     parser.add_argument("--sun-index", type=int, help="pin the sun, as the run being pictured did")
+    parser.add_argument(
+        "--matching-map",
+        choices=MATCHING_MAPS,
+        help="the map the run being pictured matched against, if not the config's",
+    )
     args = parser.parse_args()
 
     from fidelis.scenario import draw, load_config, pin_sun
@@ -80,7 +87,7 @@ def main() -> int:
     config = load_config(args.config)
     if args.sun_index is not None:
         config = pin_sun(config, args.sun_index)
-    simulator = build_simulator(args.config, args.data_dir, (args.fidelity,))
+    simulator = build_simulator(args.config, args.data_dir, (args.fidelity,), matching_map=args.matching_map)
     run = simulator.run(draw(config, args.seed), args.fidelity)
     record, nav = run.record, run.nav
     error = "no fix" if record.error_m is None else f"error {record.error_m:.1f} m"

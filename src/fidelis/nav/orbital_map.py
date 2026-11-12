@@ -164,7 +164,8 @@ def load_terrain(dtm_path: Path, mesh_json_path: Path, ring: bool = True) -> Ter
     )
 
 
-def _load(map_path: Path, terrain: Terrain) -> OrbitalMap:
+def _map_on_terrain(map_path: Path, terrain: Terrain) -> OrbitalMap:
+    """An 8-bit map image with `terrain` as the elevation beneath its pixels."""
     with rasterio.open(map_path) as src:
         image = src.read(1)
         transform = src.transform
@@ -185,7 +186,7 @@ def _load(map_path: Path, terrain: Terrain) -> OrbitalMap:
 
 def load_orbital_map(map_path: Path, dtm_path: Path, mesh_json_path: Path) -> OrbitalMap:
     """The scene's own matching map (8-bit), the scene's DTMs, and the mesh's world frame."""
-    return _load(map_path, load_terrain(dtm_path, mesh_json_path))
+    return _map_on_terrain(map_path, load_terrain(dtm_path, mesh_json_path))
 
 
 def load_lvs_map(map_path: Path, ctx_dtm_path: Path, mesh_json_path: Path) -> OrbitalMap:
@@ -193,4 +194,4 @@ def load_lvs_map(map_path: Path, ctx_dtm_path: Path, mesh_json_path: Path) -> Or
 
     `ctx_dtm_path` is the CTX DTM over the whole scene (the workflow's scene/ring_dtm.tif).
     """
-    return _load(map_path, load_terrain(ctx_dtm_path, mesh_json_path, ring=False))
+    return _map_on_terrain(map_path, load_terrain(ctx_dtm_path, mesh_json_path, ring=False))

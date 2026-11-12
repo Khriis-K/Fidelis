@@ -27,6 +27,19 @@ def test_the_monte_carlo_run_waits_for_the_lvs_map():
     assert {"jezero_lvs_map", "plain_mc"} <= set(jobs)
 
 
+@pytest.mark.parametrize(
+    "target", ["plain_mc", "plain_mc_splat", "plain_mc_mesh_pinned", "results/plain_mc/matches/seed_12.png"]
+)
+def test_the_workflows_earlier_runs_stay_on_the_map_they_used(target):
+    # These rules made the pre-#36 results on seeds 0-19. Rerun on the CTX map they would
+    # overwrite those results, and spend seeds the CTX scans must not have seen.
+    output = dry_run("local", target, "--forceall")
+
+    commands = re.findall(r"fidelis-(?:plain-mc|match-viz) .*", output)
+    assert commands
+    assert all("--matching-map scene" in command for command in commands), commands
+
+
 def test_the_lvs_map_job_stays_off_the_gpu_partition():
     # CPU-only work on the gpu partition would wait in the GPU queue and count against its cap.
     job = planned_jobs(dry_run("carc", "jezero", "--forceall"))["jezero_lvs_map"]
