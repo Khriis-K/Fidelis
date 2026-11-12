@@ -7,9 +7,9 @@ ADR 0003 measures navigation error in the **map frame**: against where the match
 
 ## Result
 
-**CTX minus HiRISE: +1.99 m east, −1.49 m north** (map metres), **±0.4 m east and ±0.6 m north**. On the ground that is +1.89 m east (the projection stretches east–west by 1/cos(latitude), scale 0.9486), so **2.41 m in all**. Recorded in `config/jezero.yaml` as `map_offset` (`east_m: +1.99`, `north_m: -1.49`, in map metres, plus `ground_m` for the scene's ground-metre frame).
+**CTX minus HiRISE: +1.99 m east, −1.49 m north** (map metres), **±0.4 m east and ±0.6 m north**. On the ground that is +1.89 m east (the projection stretches east–west by 1/cos(latitude), scale 0.9486), so **2.41 m in all**. Recorded in `config/jezero.yaml` as `ctx_map_offset`, in ground metres (`east_m: +1.89`, `north_m: -1.49`), the frame the map-frame error subtracts in, with the map-metre values alongside. Nothing reads it yet. The live `map_offset` stays at zero, which is exact while the matching map is HiRISE-derived. #36 copies `ctx_map_offset` into it when it swaps in the CTX map.
 
-Sign: CTX shows the ground that HiRISE shows at (x, y) at (x + 1.99, y − 1.49). So a navigator matching HiRISE-rendered views against the CTX map should land about 2 m east and 1.5 m south of truth while doing nothing wrong. The map-frame error (#35) subtracts this.
+Sign: CTX shows the ground that HiRISE shows at (x, y) at (x + 1.99, y − 1.49). So a navigator matching HiRISE-rendered views against the CTX map should land about 2 m east and 1.5 m south of truth while doing nothing wrong. Once the CTX map is in (#36), the map-frame error (#35, `src/fidelis/map_frame.py`) subtracts this, in ground metres. #35 uses the same convention (where the map puts a feature, less where the scene has it), so no sign change is needed.
 
 For scale: it is 6% of the 40 m failure line. It is far inside the 300 m absolute tie error the LVS map was allowed, and smaller than the ~14 m mean offset between two independent JPL Jezero maps (Cheng et al. 2021 pp.19–20, via `docs/research/lvs-error-sources.md`).
 

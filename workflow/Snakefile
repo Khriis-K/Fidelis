@@ -175,7 +175,7 @@ rule jezero_matching_map:
 
 # The whole-map offset between the LVS map (CTX) and the HiRISE tile the scene renders (#40),
 # by registering the two orthoimages. CPU only, a few minutes. The result is copied by hand
-# into config/jezero.yaml's map_offset, with docs/benchmarks/map-offset.md as its source.
+# into config/jezero.yaml's ctx_map_offset, with docs/benchmarks/map-offset.md as its source.
 rule jezero_map_offset:
     input:
         f"{JEZERO}/tile/ortho.tif",

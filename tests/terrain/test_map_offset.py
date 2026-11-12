@@ -13,6 +13,7 @@ import rasterio
 import yaml
 from rasterio.transform import from_origin
 
+from fidelis.map_frame import load_map_offset
 from fidelis.terrain.map_offset import measure_offset, shift_between, summarise
 
 REPO = Path(__file__).resolve().parents[2]
@@ -227,9 +228,18 @@ def test_the_result_records_the_area_used(tmp_path):
 
 
 def test_the_config_records_the_offset_and_where_it_came_from():
-    record = yaml.safe_load((REPO / "config" / "jezero.yaml").read_text())["map_offset"]
-    assert isinstance(record["east_m"], float) and isinstance(record["north_m"], float)
+    # ctx_map_offset waits for the CTX map (#36), which copies it into the live map_offset.
+    # It has map_offset's shape, so map_frame.load_map_offset can read it as it is.
+    config = yaml.safe_load((REPO / "config" / "jezero.yaml").read_text())
+    record = config["ctx_map_offset"]
+    offset = load_map_offset({"map_offset": record})
+    assert (offset.east_m, offset.north_m) == (record["east_m"], record["north_m"])
     assert record["uncertainty_m"]["east"] > 0 and record["uncertainty_m"]["north"] > 0
+    # east_m is ground metres, the frame map_frame_error subtracts in: the map-metre value
+    # scaled by the tile's east-west ground scale (tile.json, 0.9486 at the tile centre).
+    scale = np.cos(np.radians(config["tile"]["center_lat"]))
+    assert record["east_m"] == pytest.approx(record["map_m"]["east"] * scale, abs=0.01)
+    assert record["north_m"] == record["map_m"]["north"]
     write_up = REPO / record["write_up"]
     assert write_up.is_file()
     # The write-up must quote the very numbers the config carries, as the config's own keys

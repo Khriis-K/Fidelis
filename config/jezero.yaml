@@ -108,23 +108,25 @@ matching_map:
       mapping orbit (PDS CTX instrument description). Cheng et al. 2021, section 2.1:
       CTX acquires "images at 6 m per pixel scale over a swath 30 km wide".
 
-# The whole-map offset between the real LVS map (ctx_ortho) and the HiRISE tile the scene
-# renders (#40, ADR 0003 decision 4): CTX minus HiRISE. east_m / north_m are MAP metres, the
-# mosaics' projection; the scene and the navigator work in GROUND metres, where east is
-# east_m x the tile's east_west_ground_scale (0.9486), given below as ground_m. CTX shows the
-# ground HiRISE has at (x, y) at (x + east_m, y + north_m), so a navigator matching renders
-# against the CTX map lands truth + offset; the map-frame error (#35) removes it. Today's
-# matching map is HiRISE-derived over the tile, so the offset only applies once the CTX map
-# is swapped in (#36). Measured by registering the two orthoimages (`snakemake
-# jezero_map_offset`), never from descents. The uncertainty is a Fidelis heuristic bound, not
-# a 1-sigma: half the spread of the four half-tile medians (scripts/check_map_offset.py),
-# which the systematic residual (99th percentile 2.96 m, largest window 3.6 m) dominates. It
-# covers the method's own error on injected shifts (at most 0.10 m) but not lighting bias,
-# which isn't sized. Full method and caveats in the write-up.
-map_offset:
-  east_m: 1.99
+# The measured offset between the real LVS map (ctx_ortho) and the HiRISE tile the scene
+# renders (#40, ADR 0003 decision 4), in map_offset's shape and convention (where the map puts
+# a ground feature, less where the scene has it; CTX minus HiRISE). Nothing reads this yet:
+# #36 copies ctx_map_offset into map_offset when it swaps in the CTX map. Until then the map
+# is HiRISE-derived and map_offset's zero is exact.
+# east_m / north_m are GROUND metres, the frame map_frame_error subtracts them in. The mosaics'
+# projection stretches east-west, so in map metres (map_m) east is 1.99 / 0.9486 (the tile's
+# east_west_ground_scale). The uncertainty is a Fidelis heuristic bound, not a 1-sigma: half
+# the spread of the four half-tile medians (0.38 / 0.57 m in map metres, rounded up; from
+# scripts/check_map_offset.py), which the systematic residual (99th percentile 2.96 m, largest
+# window 3.6 m) dominates. It covers the method's own error on injected shifts (at most
+# 0.10 m), but not lighting bias, which isn't sized.
+ctx_map_offset:
+  east_m: 1.89
   north_m: -1.49
-  ground_m: {east: 1.89, north: -1.49}
+  source: >-
+    Registration of the USGS CTX ortho against the HiRISE tile by iterated phase correlation
+    over 169 windows of 768 m (`snakemake jezero_map_offset`); docs/benchmarks/map-offset.md.
+  map_m: {east: 1.99, north: -1.49}
   uncertainty_m: {east: 0.4, north: 0.6}
   write_up: docs/benchmarks/map-offset.md
 
