@@ -279,6 +279,9 @@ srun --account=irahbari_1147 --partition=debug --gres=gpu:a40:1 -c 8 --mem 32G -
 
 Each prints its estimate on the last line and writes `records.jsonl` and `estimate.json` into its results folder.
 
+- **Worked (2026-11-12).** The first map job (14062236) failed in seconds with `fidelis-lvs-map: command not found`: the branch was checked out but `uv sync` hadn't run. After the sync the map built with the laptop's shape and bounds. No A40 or L40S was free (`noderes -f -g`), so the scan and control went in as one batch job, which waits in the queue without holding a terminal: `sbatch --account=irahbari_1147 --partition=debug --gres=gpu:a40:1 -c 8 --mem=32G -t 30 -J ctx_map_scan -o results/ctx_map_scan_%j.log --wrap "<the two commands above, without srun, joined by &&>"`. Job 14062475 ran both on b11-09 (A40) in 5 min 23 s, about 129 SUs [Computed]. Results in `docs/benchmarks/ctx-map-scan.md`.
+- **The `tac450-th` reservation can't run this stack.** It is 12 nodes (`d14-[06-13,15-18]`), Thursdays 15:00–18:00, open to `irahbari_1147` (`scontrol show reservation tac450-th`, 2026-11-12), but its GPUs are V100s (`Gres=gpu:v100:2`), which CUDA 13 doesn't support. Its 384 CPU cores are usable for CPU-only work.
+
 ## Config edits and reruns
 
 Every rule that reads `config/jezero.yaml` takes it as `ancient()`, so the file's timestamp never reruns anything, and lists the values it actually reads as `params`. Snakemake reruns a rule when its params change. So a comment edit, or a change to another rule's setting, reruns nothing; changing `tile.size_m` reruns the scene and everything after it; changing `splat.steps` reruns training. Before this, any config edit rebuilt the whole scene: that's why the first `splat` run (2026-11-02) also reran `jezero_tile`, `jezero_scene`, `jezero_mesh` and `jezero_matching_map`.
