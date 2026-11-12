@@ -91,7 +91,14 @@ scene:
   blend_band_m: 200
 
 matching_map:
-  # The map is the orthoimage averaged down to the LVS map's resolution.
+  # Which map the navigator matches against (src/fidelis/simulation.py):
+  #   ctx    the real LVS map: the CTX orthomosaic's own pixels, with CTX elevation (#36,
+  #          ADR 0003 decision 6.1; src/fidelis/terrain/lvs_map.py). Its whole-map offset
+  #          from the scene is map_offset, at the end of this file.
+  #   scene  the old map: the orthoimage the scene renders, averaged down to the LVS map's
+  #          resolution, with the scene's own elevation. Its offset is zero by construction.
+  #          Every result before #36 used it; `fidelis-plain-mc --matching-map scene` reruns them.
+  source: ctx
   lvs_map_resolution:
     value_m: 6.0
     source: >-
@@ -110,9 +117,9 @@ matching_map:
 
 # The measured offset between the real LVS map (ctx_ortho) and the HiRISE tile the scene
 # renders (#40, ADR 0003 decision 4), in map_offset's shape and convention (where the map puts
-# a ground feature, less where the scene has it; CTX minus HiRISE). Nothing reads this yet:
-# #36 copies ctx_map_offset into map_offset when it swaps in the CTX map. Until then the map
-# is HiRISE-derived and map_offset's zero is exact.
+# a ground feature, less where the scene has it; CTX minus HiRISE). This is the measurement's
+# record. The offset the simulator removes is map_offset, at the end of this file, which #36
+# set to these values when it swapped in the CTX map. A test keeps the two equal.
 # east_m / north_m are GROUND metres, the frame map_frame_error subtracts them in. The mosaics'
 # projection stretches east-west, so in map metres (map_m) east is 1.99 / 0.9486 (the tile's
 # east_west_ground_scale). The uncertainty is a Fidelis heuristic bound, not a 1-sigma: half
@@ -240,10 +247,16 @@ plain_mc:
 # ground feature, less where the scene has it, metres east and north (src/fidelis/map_frame.py).
 # Removed from every fix before failures are counted, and reported on its own (ADR 0003).
 # Measured by registering the two orbital images (#40), never from descent results.
+# This is the CTX map's offset (matching_map.source: ctx), copied from ctx_map_offset above, in
+# ground metres. The scene's own map (source: scene) has none, by construction, and the code
+# knows that without reading this.
+# It is exact only over the HiRISE tile. In the ring around the tile the scene renders CTX
+# itself, so there the map and the scene agree and the true offset is zero; a view that
+# reaches the ring mixes the two. That stays in the error, like any local map distortion.
 map_offset:
-  east_m: 0.0
-  north_m: 0.0
+  east_m: 1.89
+  north_m: -1.49
   source: >-
-    Zero by construction: the matching map is a block average of the same HiRISE
-    orthoimage the scene renders, so the two share one frame exactly. #36 switches to the
-    CTX map, and #40's measured offset replaces this.
+    Registration of the USGS CTX ortho against the HiRISE tile by iterated phase correlation
+    over 169 windows of 768 m (`snakemake jezero_map_offset`); docs/benchmarks/map-offset.md.
+    Heuristic bound +-0.4 m east, +-0.6 m north.

@@ -72,7 +72,7 @@ A ratio above 1 means MFMC with this level would be **worse** than plain Monte C
 - **The real navigator's errors are small and tight:** median 2.20 m, 90th percentile 2.89 m, maximum 4.1 m. Its median is 1,993 inliers. No seed came near r = 12 m.
 - **The cheap levels' failures are degraded fixes, not wild ones.** k1000 had 19 no-fix seeds and 17 fixes beyond 12 m (maximum 36 m), with a median of 20 inliers. k2000 had 2 no-fix seeds and 9 fixes beyond 12 m, all between 12 and 19 m, with a median of 43 inliers.
 - **Cost stops falling at about 0.10 s** (30% of the real navigator) for K ≤ 8,000. Below that, matching no longer dominates, and the render, camera model and keypoint extraction set the floor (`descent-profile.md`: about 0.07 s of non-matching stages on this GPU type).
-- The real navigator's records give 70,749 map keypoints, not the 70,726 quoted in `descent-profile.md`. That's not investigated, and it doesn't affect any result above.
+- The real navigator's records give 70,749 map keypoints, not the 70,726 quoted in `descent-profile.md`. It is the GPU model, not the map (found later, `ctx-map-scan.md`), and it doesn't affect any result above.
 
 ### What it means
 

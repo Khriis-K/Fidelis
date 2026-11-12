@@ -28,9 +28,14 @@ def config_values(*keys):
 
 
 # The matching map's resolutions, without their source notes: rewording a citation changes nothing.
-MAP_RESOLUTIONS = {key: value["value_m"] for key, value in config["matching_map"].items()}
-# What fidelis-plain-mc and fidelis-match-viz read: the sampler, the simulator, the run.
-MC_CONFIG = config_values("plain_mc", "map_offset", "scenario", "simulation", "suns", "tile", "scene")
+MAP_RESOLUTIONS = {
+    key: config["matching_map"][key]["value_m"] for key in ("lvs_map_resolution", "ctx_ground_resolution")
+}
+# What fidelis-plain-mc and fidelis-match-viz read: the sampler, the simulator, the run,
+# and which map the navigator matches against.
+MC_CONFIG = config_values("plain_mc", "map_offset", "scenario", "simulation", "suns", "tile", "scene") | {
+    "matching_map": config["matching_map"]["source"]
+}
 
 
 JEZERO = "data/jezero"
@@ -79,6 +84,7 @@ rule jezero:
     input:
         f"{JEZERO}/scene/ring.json",
         f"{JEZERO}/matching_map/map.tif",
+        f"{JEZERO}/lvs_map/map.tif",
         f"{JEZERO}/mesh/mesh.ply",
         f"{JEZERO}/mesh/ring.ply",
 
@@ -159,6 +165,9 @@ rule jezero_mesh:
         f"fidelis-mesh {JEZERO}/scene {JEZERO}/mesh"
 
 
+# The scene's own map: the orthoimage it renders, averaged to 6 m. Every result before #36
+# matched against it; it stays so they reproduce (`fidelis-plain-mc --matching-map scene`),
+# and the splat views read the ground height through it.
 rule jezero_matching_map:
     input:
         rules.jezero_scene.output,
@@ -172,6 +181,26 @@ rule jezero_matching_map:
         mem_mb=4000,
     shell:
         f"fidelis-matching-map config/jezero.yaml {JEZERO}/scene {{output[0]}}"
+
+
+# The real LVS map (#36): the raw CTX orthomosaic's own pixels under the scene's footprint.
+# Nothing HiRISE-derived goes in: only the ring's bounds and the east-west ground scale.
+rule jezero_lvs_map:
+    input:
+        f"{JEZERO}/scene/ring.json",
+        f"{JEZERO}/scene/tile.json",
+        f"{JEZERO}/raw/ctx_ortho.verified",
+        ancient(CONFIG),
+    params:
+        config_used={"lvs_map_resolution": MAP_RESOLUTIONS["lvs_map_resolution"]},
+    output:
+        f"{JEZERO}/lvs_map/map.tif",
+        f"{JEZERO}/lvs_map/map.json",
+    resources:
+        mem_mb=4000,
+    shell:
+        f"fidelis-lvs-map config/jezero.yaml {JEZERO}/scene {JEZERO}/raw/ctx_ortho.tif {{output[0]}}"
+
 
 # The whole-map offset between the LVS map (CTX) and the HiRISE tile the scene renders (#40),
 # by registering the two orthoimages. CPU only, a few minutes. The result is copied by hand

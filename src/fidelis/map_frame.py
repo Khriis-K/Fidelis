@@ -11,6 +11,11 @@ and recorded in the scene config's `map_offset`. It is never estimated from desc
 results: subtracting the descents' mean error would also hide the navigator's own bias.
 Local map distortion is not removed; it is part of the fix's real error.
 
+The offset belongs to a map. The config's `matching_map.source` names the map the navigator
+matches against: "ctx", the real LVS map (#36), whose offset is `map_offset`; or "scene",
+the old map made from the orthoimage the scene renders, whose offset is zero by
+construction. Asking for a map gives its offset with it, so the two can't be mismatched.
+
 Convention: the offset is where the map puts a ground feature, less where the scene has
 it, in metres east and north. It is horizontal, since image registration measures no height.
 """
@@ -25,8 +30,38 @@ class MapOffset:
     source: str  # how it was measured, or why it is zero
 
 
-def load_map_offset(scene: dict) -> MapOffset:
-    """The scene config's `map_offset`, which must say where its numbers come from."""
+MATCHING_MAPS = ("ctx", "scene")
+
+SCENE_MAP_OFFSET = MapOffset(
+    0.0,
+    0.0,
+    "Zero by construction: the scene's own map is a block average of the same orthoimage "
+    "the scene renders, so the two share one frame exactly.",
+)
+
+
+def _checked(source: str) -> str:
+    if source not in MATCHING_MAPS:
+        raise ValueError(f"unknown matching map {source!r}; expected one of {MATCHING_MAPS}")
+    return source
+
+
+def matching_map_source(scene: dict) -> str:
+    """Which map the scene config has the navigator match against: "ctx" or "scene"."""
+    return _checked(scene["matching_map"]["source"])
+
+
+def load_map_offset(scene: dict, source: str | None = None) -> MapOffset:
+    """The whole-map offset of a matching map: `source`, or else the scene config's own choice.
+
+    The CTX map's is the config's `map_offset`, which must say where its numbers come
+    from; the scene's own map's is zero by construction. A config that names no map has
+    only its `map_offset`.
+    """
+    if source is None and "source" in scene.get("matching_map", {}):
+        source = matching_map_source(scene)
+    if source is not None and _checked(source) == "scene":
+        return SCENE_MAP_OFFSET
     entry = scene["map_offset"]
     source = str(entry.get("source") or "").strip()
     if not source:

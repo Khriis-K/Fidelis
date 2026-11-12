@@ -61,7 +61,7 @@ The low suns roughly double the error, as the 20-descent run suggested. Even so,
 - **The bias points roughly away from the sun, the way shadows fall.** Bearings of the mean offset (east, north): sun 1 (azimuth 240°) gives 54°, against 60° directly away from the sun; sun 3 (310°) gives 155°, against 130°; sun 2 (240°) gives 56°. A plausible cause is shadow edges shifting matched features. That's an inference from the directions; no test isolates it.
 - **Nothing else matters much.** Spearman rank correlation of error with each other drawn input: altitude 0.12, exposure gain −0.09, noise −0.07, blur 0.05, tilt 0.02.
 - **The worst eight descents are all sun 3** (5.66–6.70 m). They span the full drawn range of tilt (0.1–17.4°) and exposure gain (0.50–1.44), so they don't point to a second cause.
-- **Map keypoints are 70,749 in every record**, as in the sweep, against 70,726 in `descent-profile.md`. Still not investigated.
+- **Map keypoints are 70,749 in every record**, as in the sweep, against 70,726 in `descent-profile.md`. Explained later: it is the GPU model, not the map (`ctx-map-scan.md`).
 
 ### What it means
 

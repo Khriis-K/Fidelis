@@ -27,6 +27,7 @@ from statistics import NormalDist, median
 
 import yaml
 
+from fidelis.map_frame import MATCHING_MAPS
 from fidelis.scenario import MC_SEED_LIMIT, ScenarioConfig, draw, load_config, pin_sun
 from fidelis.simulation import SimulationRecord
 from fidelis.terrain.fetch import sha256_of
@@ -145,6 +146,11 @@ def main() -> int:
     parser.add_argument(
         "--sun-index", type=int, help="draw every descent under this sun (while only some suns have a splat scene)"
     )
+    parser.add_argument(
+        "--matching-map",
+        choices=MATCHING_MAPS,
+        help="default: the config's matching_map.source; 'scene' reruns earlier results on the map they used",
+    )
     args = parser.parse_args()
 
     from fidelis.simulation import build_simulator
@@ -158,13 +164,14 @@ def main() -> int:
     config = load_config(args.config)
     if args.sun_index is not None:
         config = pin_sun(config, args.sun_index)
-    simulator = build_simulator(args.config, args.data_dir, (args.fidelity,))
+    simulator = build_simulator(args.config, args.data_dir, (args.fidelity,), matching_map=args.matching_map)
     records = run_samples(simulator, config, seeds, args.fidelity)
     write_records(records, args.out_dir / "records.jsonl")
 
     est = estimate(records, settings["r_m"]["value"])
     out = asdict(est) | {
         "fidelity": args.fidelity,
+        "matching_map": simulator.matching_map,
         "seeds": [seeds.start, seeds.stop - 1],
         # None: each seed drew its own sun. Reruns of a pinned run need the same --sun-index.
         "sun_index_pinned": args.sun_index,

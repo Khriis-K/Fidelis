@@ -28,6 +28,7 @@ set-resources:
   - jezero_tile:slurm_partition=main
   - jezero_scene:slurm_partition=main
   - jezero_matching_map:slurm_partition=main
+  - jezero_lvs_map:slurm_partition=main
   - jezero_mesh:slurm_partition=main
   - jezero_map_offset:slurm_partition=main
 
