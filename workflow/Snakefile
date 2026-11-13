@@ -169,6 +169,30 @@ rule jezero_mesh:
         f"fidelis-mesh {JEZERO}/scene {JEZERO}/mesh"
 
 
+# The tile's texture with its baked terrain shading divided out (#19). CPU only. Not an
+# input of `jezero` or of any Monte Carlo rule: results so far rendered from texture.png,
+# and a new input would send them back through the queue.
+rule jezero_deshaded_texture:
+    input:
+        f"{JEZERO}/scene/dtm.tif",
+        f"{JEZERO}/scene/ortho.tif",
+        f"{JEZERO}/scene/tile.json",
+        ancient(CONFIG),
+    params:
+        # Without the check sun's source note: rewording a citation changes nothing.
+        config_used={
+            **config["deshade"],
+            "check_sun": {k: v for k, v in config["deshade"]["check_sun"].items() if k != "source"},
+        },
+    output:
+        f"{JEZERO}/mesh/texture_deshaded.png",
+        f"{JEZERO}/mesh/texture_deshaded.json",
+    resources:
+        mem_mb=8000,
+    shell:
+        f"fidelis-deshade config/jezero.yaml {JEZERO}/scene {{output[0]}}"
+
+
 # The scene's own map: the orthoimage it renders, averaged to 6 m. Every result before #36
 # matched against it; it stays so they reproduce (`fidelis-plain-mc --matching-map scene`),
 # and the splat views read the ground height through it.

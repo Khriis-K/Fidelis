@@ -26,6 +26,8 @@ Two other things were unsettled. The threshold r was a placeholder (12 m), and #
    Each step is a pre-registered failure scan with the same design as the first: 300 fresh seeds, the mesh renderer, one A40. The realistic failure rate is whatever the full set gives. Stopping early because a convenient count appeared would be the same bias in reverse.
 7. **The stress-case question is deferred** until the full realistic set has run.
 
+   **Amended 2026-11-13 (the user's decision).** The stress case (#43) and its groundwork (#19, shadow reduction) are brought forward, ahead of the scans for sourced errors 2–4. Laptop checks run before building anything predict no failures at 40 m from haze, focal-length error or attitude error; each is recorded as a comment on its issue (#37, #38, #39), with its limits. Those are predictions, not results. Decision 6 is not withdrawn: no number is reported as the realistic failure rate until its scans have run. Decision 1 still holds: whatever the stress case finds is labelled a stress case and never reported as the realistic failure rate.
+
 ## Consequences
 
 - **#28 shrinks** to choosing the smoothed indicator's sigmoid steepness. r is fixed here. Its line "the LVS 40 m target plays no part in choosing r" is reversed.

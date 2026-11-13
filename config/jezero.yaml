@@ -206,6 +206,37 @@ simulation:
   # isn't known: that is a fraction of full scale, this a fraction of the median pixel.
   mesh_spp: 256
 
+# Shadow reduction (#19, src/fidelis/terrain/deshade.py): the tile's texture with the terrain
+# shading that was baked into the orthoimage divided out.
+#   uv run snakemake --profile profiles/local data/jezero/mesh/texture_deshaded.png
+# Nothing renders from it by default: every result so far used the photo texture
+# (texture.png), and stays reproducible. Numbers and limits: docs/benchmarks/deshade.md.
+deshade:
+  # The baked shading is fitted separately in blocks of about this size, because the
+  # orthoimage is a patchwork of HiRISE images taken under different suns and its seams
+  # aren't published (docs/research/ctx-and-hirise-sun-angles.md). Smaller blocks follow a
+  # seam more closely but fit noisier suns. A Fidelis choice.
+  block_m: 1000
+  # Only structure finer than about this counts as shading in the fit, so broad albedo
+  # patterns don't. A Fidelis choice.
+  highpass_m: 100
+  # The fitted shade is never taken below this fraction of flat ground's, so a steep slope
+  # facing away from the sun is brightened by at most 1 / 0.3. A Fidelis choice.
+  shade_floor: 0.3
+  # "Fine detail" in the record's flat-ground check is structure finer than about this:
+  # the descent camera's pixels cover 4.3-8.2 m (tile.mesh_resolution_m's note).
+  detail_m: 8.0
+  # A sun bearing that does not come from the fit, to judge the fit against: the HiRISE
+  # image over the tile's centre. half_width_m (map metres east-west of the centre) keeps
+  # the check inside that image; the nearest other image sampled is at 3.5 km.
+  check_sun:
+    azimuth_deg: 267.37
+    half_width_m: 2500
+    source: >-
+      HiRISE ESP_045994_1985 RDR label (incidence 47.583 deg, sub-solar azimuth 177.367 deg
+      in a north-up product), computed in docs/research/ctx-and-hirise-sun-angles.md,
+      section 3; which image is on top is that note's 17-point check, not USGS's statement.
+
 # The splat scene (src/fidelis/splat/): `snakemake splat`, then `snakemake plain_mc_splat`.
 splat:
   # The one sun trained so far (#9): the landing-day sun. #20 trains all five. Until then
