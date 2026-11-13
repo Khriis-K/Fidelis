@@ -34,11 +34,9 @@ def test_an_offset_without_a_source_is_refused():
         load_map_offset({"map_offset": {"east_m": 1.0, "north_m": 2.0, "source": "  "}})
 
 
-def test_the_jezero_config_has_a_zero_offset_with_a_source_until_the_ctx_map_arrives():
-    # The CTX map has arrived (#36) and is the live one, with its measured offset
-    # (tests/test_matching_map_choice.py). What stays true is the scene's own map: it is made
-    # from the same orthoimage the scene renders, so its offset is exactly zero. The name is
-    # the old one because the commit hook counts a renamed test as a deleted one.
+def test_the_scenes_own_map_has_a_zero_offset_with_a_source():
+    # The scene's own map is made from the same orthoimage the scene renders, so its offset is
+    # exactly zero. The live map is CTX, with its measured offset (tests/test_matching_map_choice.py).
     scene = yaml.safe_load((REPO / "config" / "jezero.yaml").read_text(encoding="utf-8"))
     offset = load_map_offset(scene, source="scene")
     assert (offset.east_m, offset.north_m) == (0.0, 0.0)
