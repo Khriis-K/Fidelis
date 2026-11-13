@@ -165,10 +165,15 @@ So the documented failure mode is not "a different map". It is "a different map 
 
 **So 0 failures agrees with JPL's result instead of contradicting it:** inside a 100° sun difference JPL saw 0 misses in 393 runs, and we saw 0 in 300. The data point the same way. The growth in error from the old map to the CTX map is about the same under every sun (east shift 2.91–3.90 m), with no sign of it climbing towards the suns furthest from CTX's.
 
+**The actual images make the gap smaller still** (`docs/research/ctx-and-hirise-sun-angles.md`, researched after the paragraph above was written; the 77° figure used the sun range of JPL's map images, not the USGS mosaic's):
+
+- **Over our tile the map is one CTX image**, `J03_045994_1986_XN_18N282W`, with the sun 42.4° high at bearing 267.3°. The largest angle between any of our five suns and that sun is **39.0°** [Computed] (47.1° against any of the three images in the mosaic).
+- **The render texture carries the map's own lighting.** Over the centre of the tile, landing site included, the HiRISE texture is `ESP_045994_1985`, taken on the same MRO pass as that CTX image, 14 seconds apart. Its baked shadows are lit from the same direction as the map's (0.1° apart). Our simulated sun only reshades the 4 m terrain on top of that. So the real lighting difference between a render and the map is smaller than even 39° suggests.
+- **The east strip of the tile is the exception.** There the texture is another HiRISE image, lit from bearing 219.2°, 37° from the map's sun.
+
 What this doesn't settle:
 
-- **Which CTX images make up the USGS mosaic over our scene, and their sun angles, aren't recorded in the repo.** The range above is for the images in JPL's own map. If USGS used others, the 77° bound moves.
-- **The render's lighting isn't only our sun.** The HiRISE texture has its own shadows baked in, and its sun angle wasn't found.
-- **It is an explanation by agreement, not by experiment.** The direct test is a stress case: render under a sun more than 100° from CTX's (a morning sun, say) and see whether misses appear, as they did for JPL. Such a sun is outside LVS's design box, so by ADR 0003 it would be a labelled stress case, never part of the realistic failure rate. Not run.
+- **The image on top at each point is our own check, not USGS's statement.** USGS documents neither mosaic's image order. The research note matched patches of each mosaic to its source images at 25 points (CTX) and 17 points (HiRISE).
+- **It is an explanation by agreement, not by experiment, and the experiment looks weak in this renderer.** With the map's lighting baked into the texture, a render under a far-off sun is only partly relit. A stress run that finds no misses would say little (issue #43). The direct test is a stress case: render under a sun more than 100° from CTX's (a morning sun, say) and see whether misses appear, as they did for JPL. Such a sun is outside LVS's design box, so by ADR 0003 it would be a labelled stress case, never part of the realistic failure rate. Not run.
 
 Next is #37 (dust haze), as ADR 0003 orders it, whatever this count was. Haze is the first remaining error that attacks matching itself (contrast) instead of shifting a good fix. With the map in, the realistic model's worst case stands at a quarter of r, so whether the full set produces any failures at 40 m is an open question, and ADR 0003's deferred decision 7 (stress cases) may come back.
