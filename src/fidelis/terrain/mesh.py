@@ -170,10 +170,14 @@ def mitsuba_shape(mesh_dir: Path, ply: str = "mesh.ply", texture: str = "texture
     }
 
 
-def terrain_shapes(mesh_dir: Path) -> dict:
-    """Every terrain shape mesh.json lists, as Mitsuba shape dicts: the tile, and the CTX ring if built."""
+def terrain_shapes(mesh_dir: Path, texture: str = "texture.png") -> dict:
+    """Every terrain shape mesh.json lists, as Mitsuba shape dicts: the tile, and the CTX ring if built.
+
+    `texture` is the tile's texture file in mesh_dir: the orthoimage as photographed, or
+    `texture_deshaded.png` (`fidelis.terrain.deshade`). The ring keeps its own.
+    """
     mesh_dir = Path(mesh_dir)
-    shapes = {"terrain": mitsuba_shape(mesh_dir)}
+    shapes = {"terrain": mitsuba_shape(mesh_dir, texture=texture)}
     ring = json.loads((mesh_dir / "mesh.json").read_text()).get("ring")
     if ring is not None:
         shapes["ring"] = mitsuba_shape(mesh_dir, ring["ply"], ring["texture"])

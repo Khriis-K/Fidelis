@@ -55,17 +55,18 @@ def config_suns(scene: dict) -> list[Sun]:
     return [Sun(s["azimuth_deg"], s["elevation_deg"]) for s in scene["suns"]]
 
 
-def terrain_scene(mesh_dir: Path, sun: Sun):
+def terrain_scene(mesh_dir: Path, sun: Sun, texture: str = "texture.png"):
     """The textured terrain (the tile, and the CTX ring if built) lit by the sun.
 
-    Load once per mesh and sun, render many poses.
+    Load once per mesh and sun, render many poses. `texture` names the tile's texture
+    file (`fidelis.terrain.mesh.terrain_shapes`).
     """
     import mitsuba as mi
 
     return mi.load_dict(
         {
             "type": "scene",
-            **terrain_shapes(mesh_dir),
+            **terrain_shapes(mesh_dir, texture),
             "sun": {"type": "directional", "direction": (-sun.direction()).tolist(), "irradiance": math.pi},
         }
     )
