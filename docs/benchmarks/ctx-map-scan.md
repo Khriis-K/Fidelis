@@ -154,4 +154,21 @@ The plan's "0 failures" branch applies. Matching against the real LVS map, with 
 
 The "many failures" worry, that Fidelis's relit HiRISE renders might look too unlike CTX to match at all, did not happen: every descent matched, with at least 691 inliers. That doesn't show the renders look like real descent images. It shows the matcher copes with the HiRISE-to-CTX gap.
 
+### Why the research didn't predict failures here (added after the results, 2026-11-12)
+
+The research note ranked the map mismatch as the most likely source of failures. That ranking was our inference, and it over-read the source. What JPL's field test found (Johnson et al. 2020, via `docs/research/lvs-error-sources.md`, section 3):
+
+- with the map-to-image sun difference stretched from 20° to **100°**, all 393 runs still met 40 m;
+- the only misses, 6 or 7 of a further 263 runs, all had a sun difference **above 100°**.
+
+So the documented failure mode is not "a different map". It is "a different map lit from a very different direction". This scan never went there. Fidelis's five suns sit at azimuth 240–310° and elevation 25–55°. The CTX images in JPL's map were taken with the sun at azimuth 222.9–295.1° and elevation 25.6–51.9° (Cheng et al. 2021 Tables 5–6, via the same note). The angle between any of our suns and any sun in that range is **at most 77°** [Computed] (sun 3 against the far corner of the range), and the largest azimuth gap is 87°. Both are under 100°.
+
+**So 0 failures agrees with JPL's result instead of contradicting it:** inside a 100° sun difference JPL saw 0 misses in 393 runs, and we saw 0 in 300. The data point the same way. The growth in error from the old map to the CTX map is about the same under every sun (east shift 2.91–3.90 m), with no sign of it climbing towards the suns furthest from CTX's.
+
+What this doesn't settle:
+
+- **Which CTX images make up the USGS mosaic over our scene, and their sun angles, aren't recorded in the repo.** The range above is for the images in JPL's own map. If USGS used others, the 77° bound moves.
+- **The render's lighting isn't only our sun.** The HiRISE texture has its own shadows baked in, and its sun angle wasn't found.
+- **It is an explanation by agreement, not by experiment.** The direct test is a stress case: render under a sun more than 100° from CTX's (a morning sun, say) and see whether misses appear, as they did for JPL. Such a sun is outside LVS's design box, so by ADR 0003 it would be a labelled stress case, never part of the realistic failure rate. Not run.
+
 Next is #37 (dust haze), as ADR 0003 orders it, whatever this count was. Haze is the first remaining error that attacks matching itself (contrast) instead of shifting a good fix. With the map in, the realistic model's worst case stands at a quarter of r, so whether the full set produces any failures at 40 m is an open question, and ADR 0003's deferred decision 7 (stress cases) may come back.
