@@ -116,17 +116,17 @@ def render(scene, pose: CameraPose, intrinsics: Intrinsics, spp: int, seed: int 
 
 
 class MeshRenderer:
-    """The simulator's "mesh" fidelity: the mesh under one of a fixed list of suns.
+    """The simulator's "mesh" fidelity: the mesh, with the tile texture named, under one of a fixed list of suns.
 
     Keeps one sun's scene loaded at a time (about 2 s to load the Jezero mesh); callers
     running many descents should group them by sun. Sets the `cuda_ad_rgb` variant.
     """
 
-    def __init__(self, mesh_dir: Path, suns: list[Sun], spp: int):
+    def __init__(self, mesh_dir: Path, suns: list[Sun], spp: int, texture: str = "texture.png"):
         import mitsuba as mi
 
         mi.set_variant("cuda_ad_rgb")
-        self.mesh_dir, self.suns, self.spp = Path(mesh_dir), list(suns), spp
+        self.mesh_dir, self.suns, self.spp, self.texture = Path(mesh_dir), list(suns), spp, texture
         self._scene, self._sun_index = None, None
 
     def use_sun(self, sun_index: int) -> None:
@@ -138,7 +138,7 @@ class MeshRenderer:
 
             self._scene = None
             dr.flush_malloc_cache()
-            self._scene = terrain_scene(self.mesh_dir, self.suns[sun_index])
+            self._scene = terrain_scene(self.mesh_dir, self.suns[sun_index], self.texture)
             self._sun_index = sun_index
 
     def __call__(self, pose: CameraPose, intrinsics: Intrinsics, sun_index: int, seed: int) -> np.ndarray:

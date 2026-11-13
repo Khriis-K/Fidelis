@@ -51,6 +51,7 @@ from fidelis.nav.orbital_map import OrbitalMap, load_lvs_map, load_orbital_map, 
 from fidelis.render.camera import CameraPose, Intrinsics, look_at
 from fidelis.render.degrade import camera_image
 from fidelis.scenario import Scenario
+from fidelis.stress import PHOTO_TEXTURE, REALISTIC_SUNS, SUN_LISTS, TEXTURES, suns_for
 from fidelis.terrain.fetch import sha256_of
 
 Renderer = Callable[[CameraPose, Intrinsics, int, int], np.ndarray]
@@ -111,6 +112,11 @@ class SimulationRecord:
     # own). None in records from before #36, which all used the scene's own, and from a
     # simulator built without a scene config (tests).
     matching_map: str | None = None
+    # Which config list scenario.sun_index indexes ("suns", or "stress_suns" for the stress case),
+    # and the tile texture rendered (fidelis.stress). None in records from before #43, which all
+    # used "suns" and the photo texture. Anything else is a stress case, never a realistic rate.
+    sun_list: str | None = None
+    texture: str | None = None
 
 
 @dataclass(frozen=True)
@@ -130,7 +136,14 @@ class Simulator:
         map_offset: MapOffset = NO_OFFSET,
         ground_height: Callable[[float, float], float] | None = None,
         matching_map: str | None = None,
+        sun_list: str = REALISTIC_SUNS,
+        texture: str = PHOTO_TEXTURE,
     ):
+        if sun_list not in SUN_LISTS:
+            raise ValueError(f"unknown sun list {sun_list!r}; expected one of {SUN_LISTS}")
+        if texture not in TEXTURES:
+            raise ValueError(f"unknown texture {texture!r}; expected one of {TEXTURES}")
+        self.sun_list, self.texture = sun_list, texture
         self.renderers = renderers
         self.navigator = navigator
         self.intrinsics = intrinsics
@@ -186,6 +199,8 @@ class Simulator:
             map_frame_error_vector=in_map,
             map_frame_error_m=None if in_map is None else float(np.linalg.norm(in_map)),
             matching_map=self.matching_map,
+            sun_list=self.sun_list,
+            texture=self.texture,
         )
         return Run(record, image, nav)
 
@@ -224,6 +239,8 @@ def build_simulator(
     suns=None,
     device: str = "cuda",
     matching_map: str | None = None,
+    sun_list: str = REALISTIC_SUNS,
+    texture: str = PHOTO_TEXTURE,
 ) -> Simulator:
     """Jezero at the asked fidelities, the matching map, its offset, and LCAM, from the scene config and workflow data.
 
@@ -231,6 +248,10 @@ def build_simulator(
     test's zenith sun, say). "splat" renders the splat scene of each sun that has one in
     data_dir/splat/sun<i>/ (`snakemake splat`). `matching_map` overrides the config's
     `matching_map.source`; "scene" reruns earlier results on the map they used.
+
+    The stress case (#43, fidelis.stress): `sun_list="stress_suns"` lights the mesh with the
+    config's stress suns instead, and `texture` picks the tile texture the mesh renders. Both
+    are mesh only, and both label every record.
     """
     scene = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
     data_dir = Path(data_dir)
@@ -239,12 +260,16 @@ def build_simulator(
     renderer_names = {parse_fidelity(f)[0]: f for f in fidelities}  # each renderer once, with a level that asked for it
     for renderer_name, fidelity in renderer_names.items():
         if renderer_name == "mesh":
-            from fidelis.render.mesh_render import MeshRenderer, config_suns
+            from fidelis.render.mesh_render import MeshRenderer
 
             if suns is None:
-                suns = config_suns(scene)
-            renderers["mesh"] = MeshRenderer(data_dir / "mesh", suns, spp=scene["simulation"]["mesh_spp"])
+                suns = suns_for(scene, sun_list)
+            renderers["mesh"] = MeshRenderer(
+                data_dir / "mesh", suns, spp=scene["simulation"]["mesh_spp"], texture=texture
+            )
         elif renderer_name == "splat":
+            if (sun_list, texture) != (REALISTIC_SUNS, PHOTO_TEXTURE):
+                raise ValueError("splat scenes exist only for the realistic suns on the photo texture")
             from fidelis.render.splat_render import SplatRenderer
 
             checkpoints = {i: data_dir / "splat" / f"sun{i}" / "splat.pt" for i in range(len(scene["suns"]))}
@@ -263,6 +288,8 @@ def build_simulator(
         map_offset=load_map_offset(scene, source),
         ground_height=terrain.ground_height,
         matching_map=source,
+        sun_list=sun_list,
+        texture=texture,
     )
 
 

@@ -197,6 +197,20 @@ suns:
   - {azimuth_deg: 310, elevation_deg: 25}
   - {azimuth_deg: 310, elevation_deg: 55}
 
+# The stress case (#43, docs/benchmarks/stress-sun-scan.md). A diagnostic, never the realistic
+# failure rate (ADR 0003, decision 1). scenario.sun_index never draws from stress_suns: a run
+# pins one with `fidelis-plain-mc --stress-sun <i>`, and its records are labelled stress.
+# The sun of the CTX image under the LVS map over the tile, J03_045994_1986_XN_18N282W
+# (docs/research/ctx-and-hirise-sun-angles.md, section 2, [Computed] from the PDS index).
+ctx_map_sun: {azimuth_deg: 267.37, elevation_deg: 42.42}
+# One elevation, so only the bearing changes along the dose; bearings are the map's + 90, 130
+# and 180 deg. sun_difference_deg is the angle between this sun and ctx_map_sun [Computed];
+# a test recomputes it. JPL's field misses all came above 100 deg (lvs-error-sources.md, section 3).
+stress_suns:
+  - {azimuth_deg: 357.37, elevation_deg: 25, sun_difference_deg: 73.4}
+  - {azimuth_deg: 37.37, elevation_deg: 25, sun_difference_deg: 98.3}
+  - {azimuth_deg: 87.37, elevation_deg: 25, sun_difference_deg: 112.6}
+
 # The simulation interface (src/fidelis/simulation.py).
 simulation:
   # Path-tracing samples per pixel for the "mesh" fidelity. At 64 spp the render's own noise

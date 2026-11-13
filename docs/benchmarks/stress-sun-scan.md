@@ -85,9 +85,38 @@ Five runs × 300 descents = 1,500 descents. The CTX map scan ran 600 descents in
 
 ### Known before the run
 
-- **No descent has been rendered from the de-shaded texture yet.** `terrain_scene` accepts `texture=`, but neither `fidelis-plain-mc` nor the simulator passes it. Building that, the `stress_suns` list and the stress labelling comes first. Laptop smoke descents on seeds outside 40,000–40,299 check the plumbing and are reported only as a smoke test.
+- **No descent had been rendered from the de-shaded texture when this plan was written.** `terrain_scene` accepted `texture=`, but neither `fidelis-plain-mc` nor the simulator passed it. Building that, the `stress_suns` list and the stress labelling came first. Laptop smoke descents on seeds outside 40,000–40,299 check the plumbing and are reported only as a smoke test.
 - **De-shading is weak outside the tile centre.** In the east strip the fit explains a median of 5% of local brightness (`deshade.md`), and the CTX ring isn't de-shaded at all. A view's lighting there is still partly baked.
 - **The 0.623 proxy is a stand-in** for ALIKED + LightGlue, with the photo standing in for the map.
+
+## How to run it (added after the plan was committed)
+
+The plan above was committed as `745b240`. This section adds the build and the commands. Nothing in the plan changed.
+
+**What was built (#43).** `stress_suns` and `ctx_map_sun` in `config/jezero.yaml`. `fidelis-plain-mc --stress-sun <i>` pins a stress sun, and `--texture texture_deshaded.png` picks the de-shaded texture (`src/fidelis/stress.py`). Every record carries `sun_list` and `texture`. Every estimate carries `stress_case`, and its summary begins `STRESS CASE, not a failure rate`. `estimate()` refuses to pool stress records with realistic ones, two textures, or two stress suns. The stress suns are indexed 0–2: Stress 1 is `--stress-sun 0`, Stress 3 is `--stress-sun 2`.
+
+**On CARC**, in the clone, with this branch checked out and `uv sync` run (the CTX map scan's first job failed without it, `docs/carc.md`). First the de-shaded texture (CPU, about 25 s on the laptop; it isn't part of the default build):
+
+    uv run --no-sync snakemake --profile profiles/carc data/jezero/mesh/texture_deshaded.png
+
+Then all five runs as one batch job, so they share a node and wait in the queue without holding a terminal:
+
+    sbatch --account=irahbari_1147 --partition=debug --gres=gpu:a40:1 -c 8 --mem=32G -t 45 -J stress_sun_scan -o results/stress_sun_scan_%j.log --wrap "module purge && module load ver/2607 gcc/15.3.0 cuda/13.0.3 && R='uv run --no-sync fidelis-plain-mc config/jezero.yaml data/jezero' && S='--fidelity mesh --first-seed 40000 --samples 300' && \$R results/stress_sun/anchor \$S --sun-index 3 --texture texture_deshaded.png && \$R results/stress_sun/stress1 \$S --stress-sun 0 --texture texture_deshaded.png && \$R results/stress_sun/stress2 \$S --stress-sun 1 --texture texture_deshaded.png && \$R results/stress_sun/stress3 \$S --stress-sun 2 --texture texture_deshaded.png && \$R results/stress_sun/stress3_photo \$S --stress-sun 2"
+
+The log ends with one `STRESS CASE` line per run. Each folder has `records.jsonl` and `estimate.json`. The 45-minute limit is about three times the cost estimate above; at 24 SUs a minute it caps the job at 1,080 SUs [Computed].
+
+## Smoke test on the laptop (after the plan was committed; not a result)
+
+Run on 2026-11-13 to check the plumbing end to end. Seeds 30,004–30,005 (outside the scan's, and now used), mesh renderer, RTX 5070 Laptop GPU, the map **thinned to its 8,000 highest-scoring keypoints** (`--fidelity mesh-k8000`), because the laptop can't hold the full map's matching. So this is not the real navigator, not the pinned GPU, and two descents per run: it says the code runs, and nothing about a failure rate.
+
+| Run | Seed 30004: inliers / map-frame error | Seed 30005: inliers / map-frame error |
+|---|---|---|
+| Anchor (39.0°, de-shaded) | 293 / 5.47 m | 247 / 7.68 m |
+| Stress 3 (112.6°, de-shaded) | 272 / 11.77 m | 189 / 10.44 m |
+| Stress 3 (112.6°, photo) | 290 / 8.00 m | 253 / 5.81 m |
+
+- **All six got a fix.** Every record and estimate carried its labels, and each summary began `STRESS CASE`.
+- **The renders changed with the sun and the texture, not just the labels.** The same seeds gave different inlier counts and errors in each run. The direction matches the prediction: fewer inliers and larger errors at 112.6° on the de-shaded texture than at the anchor or on the photo. Two seeds on a thinned map can't say more than that.
 
 ## Results
 
