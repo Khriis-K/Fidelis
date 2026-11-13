@@ -33,6 +33,8 @@ RENDER_DETERMINISM_TOLERANCE = 1e-6
 # Mitsuba's perspective camera looks along its local +z with +y up and +x to the left;
 # OpenCV's has +y down and +x to the right.
 _OPENCV_TO_MITSUBA = np.diag([-1.0, -1.0, 1.0])
+# The tile texture as photographed (fidelis.terrain.mesh); fidelis.stress names the others.
+PHOTO_TEXTURE = "texture.png"
 
 
 @dataclass(frozen=True)
@@ -55,7 +57,7 @@ def config_suns(scene: dict) -> list[Sun]:
     return [Sun(s["azimuth_deg"], s["elevation_deg"]) for s in scene["suns"]]
 
 
-def terrain_scene(mesh_dir: Path, sun: Sun, texture: str = "texture.png"):
+def terrain_scene(mesh_dir: Path, sun: Sun, texture: str = PHOTO_TEXTURE):
     """The textured terrain (the tile, and the CTX ring if built) lit by the sun.
 
     Load once per mesh and sun, render many poses. `texture` names the tile's texture
@@ -122,7 +124,7 @@ class MeshRenderer:
     running many descents should group them by sun. Sets the `cuda_ad_rgb` variant.
     """
 
-    def __init__(self, mesh_dir: Path, suns: list[Sun], spp: int, texture: str = "texture.png"):
+    def __init__(self, mesh_dir: Path, suns: list[Sun], spp: int, texture: str = PHOTO_TEXTURE):
         import mitsuba as mi
 
         mi.set_variant("cuda_ad_rgb")

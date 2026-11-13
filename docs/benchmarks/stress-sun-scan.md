@@ -93,7 +93,7 @@ Five runs × 300 descents = 1,500 descents. The CTX map scan ran 600 descents in
 
 The plan above was committed as `745b240`. This section adds the build and the commands. Nothing in the plan changed.
 
-**What was built (#43).** `stress_suns` and `ctx_map_sun` in `config/jezero.yaml`. `fidelis-plain-mc --stress-sun <i>` pins a stress sun, and `--texture texture_deshaded.png` picks the de-shaded texture (`src/fidelis/stress.py`). Every record carries `sun_list` and `texture`. Every estimate carries `stress_case`, and its summary begins `STRESS CASE, not a failure rate`. `estimate()` refuses to pool stress records with realistic ones, two textures, or two stress suns. The stress suns are indexed 0–2: Stress 1 is `--stress-sun 0`, Stress 3 is `--stress-sun 2`.
+**What was built (#43).** `stress_suns` and `ctx_map_sun` in `config/jezero.yaml`. `fidelis-plain-mc --stress-sun <i>` pins a stress sun, and `--texture texture_deshaded.png` picks the de-shaded texture (`src/fidelis/stress.py`). Every record carries `sun_list` and `texture`. Every estimate carries `stress_case` and `pinned_sun`: the one sun the run used, with its angle from the map's sun (39.0° for the anchor). Its summary begins `STRESS CASE, not a failure rate`. A run on the de-shaded texture must pin its sun; otherwise it is refused before anything renders. `estimate()` refuses to pool stress records with realistic ones, two textures, or two stress suns. The stress suns are indexed 0–2: Stress 1 is `--stress-sun 0`, Stress 3 is `--stress-sun 2`.
 
 **On CARC**, in the clone, with this branch checked out and `uv sync` run (the CTX map scan's first job failed without it, `docs/carc.md`). First the de-shaded texture (CPU, about 25 s on the laptop; it isn't part of the default build):
 

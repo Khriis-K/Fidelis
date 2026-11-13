@@ -20,3 +20,23 @@ The criterion "a stress run renders from the stress list" had no test until this
 
 ## Verification results
 11/11 criteria VERIFIED. None VACUOUS, BROKEN-TEST or UNVALIDATABLE.
+
+## After the code review (same day)
+
+The review found that a de-shaded run without a pinned sun rendered every descent, then failed at the estimate, and that the anchor's `estimate.json` lacked its 39.0°. Both were fixed test-first. The new tests and three original ones were checked the same way (all in `tests/test_stress.py` unless named):
+
+| Criterion | Test | Mutation | Result |
+|---|---|---|---|
+| A de-shaded run must pin its sun | `test_a_run_on_the_deshaded_texture_without_a_pinned_sun_is_refused_before_it_starts` | check disabled | VERIFIED |
+| The anchor records its 39.0° | `test_the_anchor_records_its_realistic_sun_and_its_39_degrees` | realistic branch removed from `pinned_sun` | VERIFIED |
+| `stress_case` follows the labels | `test_a_stress_estimate_is_labelled_as_one_in_its_fields_and_its_summary` | property returns False | VERIFIED |
+| Custom suns are never realistic | `test_custom_suns_are_never_counted_as_realistic` | `custom` treated as realistic | VERIFIED |
+| Estimates refuse stress + realistic (rechecked) | `test_an_estimate_refuses_to_pool_stress_and_realistic_records` | label check removed | VERIFIED |
+| Records carry their labels (rechecked) | `test_a_stress_simulator_labels_even_a_no_fix_record` | `sun_list` left off | VERIFIED |
+| The renderer uses its texture (rechecked, GPU) | `render/test_mesh_renderer_texture.py` | texture ignored | VERIFIED |
+
+7/7 VERIFIED.
+
+**Not covered by a running test:** that `build_simulator(suns=...)` labels its records `custom`. Only `is_stress_case("custom")` is tested. The natural place, the GPU test `test_simulation.py::test_perfect_conditions_on_the_jezero_mesh_locate_within_half_a_ctx_map_pixel`, already fails at 2,300 m before this change. It asks for a true-frame error under 3.0 m, and since the CTX map (#36) that error includes the whole-map offset: 3.72 m true frame, 1.52 m map frame. Changing its bound needs the user's sign-off.
+
+**Tests not moved.** The review suggested moving the estimate and simulator tests to mirror the source layout. The pre-commit guard reads an adapted move as a deletion, so the tests stayed in `tests/test_stress.py` (the user's choice, 2026-11-13).

@@ -17,12 +17,18 @@ from fidelis.render.mesh_render import Sun, config_suns
 from fidelis.scenario import Scenario, draw, load_config
 from fidelis.simulation import SimulationRecord, Simulator
 from fidelis.stress import (
+    CUSTOM_SUNS,
     DESHADED_TEXTURE,
     PHOTO_TEXTURE,
+    REALISTIC_SUNS,
     STRESS_SUNS,
+    check_pinned_sun,
+    check_sun_list,
     ctx_map_sun,
     is_stress_case,
     pin_stress_sun,
+    pinned_sun,
+    pool_key,
     stress_suns,
     sun_difference_deg,
     suns_for,
@@ -259,3 +265,58 @@ def test_an_unknown_sun_list_or_texture_is_a_caller_error(navigator):
         Simulator({"black": render_black}, navigator, K, sun_list="moons")
     with pytest.raises(ValueError, match="texture"):
         Simulator({"black": render_black}, navigator, K, texture="texture_blurred.png")
+
+
+# --- after the code review (#43): custom suns, a pinned sun for off-photo runs, the pinned sun's angle
+
+
+def test_custom_suns_can_label_a_simulator_but_never_come_from_the_config():
+    check_sun_list(CUSTOM_SUNS)
+    with pytest.raises(ValueError, match="sun list"):
+        suns_for(SCENE, CUSTOM_SUNS)
+
+
+def test_custom_suns_are_never_counted_as_realistic():
+    # A test's zenith sun, say: not one of the config's realistic suns.
+    assert is_stress_case(record(sun_list=CUSTOM_SUNS))
+
+
+def test_realistic_records_share_a_pool_key_across_suns_and_stress_records_only_within_one():
+    assert pool_key(record(sun_index=0)) == pool_key(record(sun_index=3, sun_list=None, texture=None))
+    stress = dict(sun_list=STRESS_SUNS, texture=DESHADED_TEXTURE)
+    assert pool_key(record(sun_index=0, **stress)) != pool_key(record(sun_index=2, **stress))
+
+
+def test_a_run_on_the_deshaded_texture_without_a_pinned_sun_is_refused_before_it_starts():
+    # Unpinned, its draws span five suns, which estimate() won't pool: it would render everything, then fail.
+    with pytest.raises(ValueError, match="pin"):
+        check_pinned_sun(DESHADED_TEXTURE, sun_index=None, stress_sun=None)
+
+
+@pytest.mark.parametrize(("sun_index", "stress_sun"), [(3, None), (None, 2)])
+def test_a_run_on_the_deshaded_texture_with_a_pinned_sun_is_allowed(sun_index, stress_sun):
+    check_pinned_sun(DESHADED_TEXTURE, sun_index=sun_index, stress_sun=stress_sun)
+
+
+def test_a_realistic_run_on_the_photo_still_draws_its_own_suns():
+    check_pinned_sun(PHOTO_TEXTURE, sun_index=None, stress_sun=None)
+
+
+def test_the_anchor_records_its_realistic_sun_and_its_39_degrees():
+    assert pinned_sun(SCENE, sun_index=3, stress_sun=None) == {
+        "sun_list": REALISTIC_SUNS,
+        "index": 3,
+        "azimuth_deg": 310,
+        "elevation_deg": 25,
+        "sun_difference_deg": 39.0,
+    }
+
+
+def test_a_stress_sun_records_its_computed_difference():
+    sun = pinned_sun(SCENE, sun_index=None, stress_sun=2)
+    assert (sun["sun_list"], sun["index"], sun["azimuth_deg"]) == (STRESS_SUNS, 2, 87.37)
+    assert sun["sun_difference_deg"] == 112.6
+
+
+def test_an_unpinned_run_records_no_single_sun():
+    assert pinned_sun(SCENE, sun_index=None, stress_sun=None) is None

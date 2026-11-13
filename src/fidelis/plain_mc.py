@@ -28,9 +28,19 @@ from statistics import NormalDist, median
 import yaml
 
 from fidelis.map_frame import MATCHING_MAPS
+from fidelis.render.mesh_render import PHOTO_TEXTURE
 from fidelis.scenario import MC_SEED_LIMIT, ScenarioConfig, draw, load_config, pin_sun
 from fidelis.simulation import SimulationRecord
-from fidelis.stress import STRESS_SUNS, TEXTURES, is_stress_case, pin_stress_sun, stress_label
+from fidelis.stress import (
+    REALISTIC_SUNS,
+    STRESS_SUNS,
+    TEXTURES,
+    check_pinned_sun,
+    is_stress,
+    pin_stress_sun,
+    pinned_sun,
+    pool_key,
+)
 from fidelis.terrain.fetch import sha256_of
 
 
@@ -76,10 +86,14 @@ class Estimate:
     # source. None for records from before ADR 0003, which didn't record one.
     map_offset_m: list[float] | None
     map_offset_source: str | None
-    # A stress case (fidelis.stress, #43) is a diagnostic, never the realistic failure rate.
-    stress_case: bool = False
-    sun_list: str = "suns"
-    texture: str = "texture.png"
+    # The sun list and texture every record shared (fidelis.stress, #43). Anything but the
+    # realistic suns on the photo is a stress case: a diagnostic, never the realistic failure rate.
+    sun_list: str = REALISTIC_SUNS
+    texture: str = PHOTO_TEXTURE
+
+    @property
+    def stress_case(self) -> bool:
+        return is_stress(self.sun_list, self.texture)
 
     def summary(self) -> str:
         if self.map_offset_m is None:
@@ -101,10 +115,10 @@ def estimate(records: list[SimulationRecord], r_m: float, confidence: float = 0.
     All records must share one map offset, and one stress label: stress and realistic records
     never share an estimate, nor do two stress suns or two textures (fidelis.stress).
     """
-    labels = {stress_label(r) for r in records}
+    labels = {pool_key(r) for r in records}
     if len(labels) > 1:
         raise ValueError(f"stress and realistic records, two textures or two stress suns can't pool: {labels}")
-    sun_list, texture, _ = next(iter(labels), ("suns", "texture.png", None))
+    sun_list, texture, _ = next(iter(labels), (REALISTIC_SUNS, PHOTO_TEXTURE, None))
     offsets = {(None if r.map_offset_m is None else tuple(r.map_offset_m), r.map_offset_source) for r in records}
     if len(offsets) > 1:
         raise ValueError(f"records measured against different map offsets can't share an estimate: {offsets}")
@@ -125,7 +139,6 @@ def estimate(records: list[SimulationRecord], r_m: float, confidence: float = 0.
         r_m=r_m,
         map_offset_m=None if offset is None else list(offset),
         map_offset_source=source,
-        stress_case=any(is_stress_case(r) for r in records),
         sun_list=sun_list,
         texture=texture,
     )
@@ -172,7 +185,7 @@ def main() -> int:
     parser.add_argument(
         "--texture",
         choices=TEXTURES,
-        default=TEXTURES[0],
+        default=PHOTO_TEXTURE,
         help="the tile texture the mesh renders; anything but the photo is labelled a stress case",
     )
     parser.add_argument(
@@ -190,6 +203,7 @@ def main() -> int:
     seeds = range(args.first_seed, args.first_seed + n)
     if seeds.stop > MC_SEED_LIMIT:
         raise ValueError(f"Monte Carlo seeds must stay below {MC_SEED_LIMIT}: splat training views use those above")
+    check_pinned_sun(args.texture, args.sun_index, args.stress_sun)
     config = load_config(args.config)
     if args.sun_index is not None:
         config = pin_sun(config, args.sun_index)
@@ -200,22 +214,22 @@ def main() -> int:
         args.data_dir,
         (args.fidelity,),
         matching_map=args.matching_map,
-        sun_list=STRESS_SUNS if args.stress_sun is not None else "suns",
+        sun_list=STRESS_SUNS if args.stress_sun is not None else REALISTIC_SUNS,
         texture=args.texture,
     )
     records = run_samples(simulator, config, seeds, args.fidelity)
     write_records(records, args.out_dir / "records.jsonl")
 
     est = estimate(records, settings["r_m"]["value"])
-    stress_sun = None if args.stress_sun is None else {"index": args.stress_sun} | scene[STRESS_SUNS][args.stress_sun]
     out = asdict(est) | {
         "fidelity": args.fidelity,
         "matching_map": simulator.matching_map,
         "seeds": [seeds.start, seeds.stop - 1],
         # None: each seed drew its own sun. Reruns of a pinned run need the same --sun-index.
         "sun_index_pinned": args.sun_index,
-        # Which stress sun lit every descent, if any, with its angle from the map's sun.
-        "stress_sun": stress_sun,
+        # The one sun a pinned run used, with its angle from the map's sun; None if each seed drew its own.
+        "pinned_sun": pinned_sun(scene, args.sun_index, args.stress_sun),
+        "stress_case": est.stress_case,
         "gpu": sorted({r.gpu for r in records}),
         "median_cost_s": median(r.cost_s for r in records),
         # Reruns need the same config: its hash says whether a later one still is.
