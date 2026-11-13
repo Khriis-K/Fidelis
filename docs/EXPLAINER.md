@@ -228,6 +228,16 @@ A refresher for explaining Fidelis to recruiters. Plain English first, key techn
 
 **What it taught us.** A small unexplained difference is cheap to chase with a controlled comparison (same file, same code, change one thing). And the truth must never be read through the system under test. It was harmless only while the map and the scene were the same data.
 
+### A prediction we got wrong by reading a summary instead of the numbers
+
+**The problem.** Our research into JPL's testing said the real map was the likeliest thing to make the navigator fail: mismatched map and image was the only documented cause of misses. We built the real-map test expecting failures. It found none in 300 landings.
+
+**How we noticed.** The result contradicted our own note, so we reread the note's body instead of its summary. The numbers were there all along: JPL's 6 or 7 misses all happened when the sun was more than 100° away from where it was in the map photo. Inside 100°, all 393 runs passed. A one-line calculation showed our simulated suns were at most 77° away. Then we looked up the actual photos: over our scene the map is one CTX image, and our suns are at most 39° from its sun. Better still, the photo we render from was taken on the same spacecraft pass as the map, 14 seconds apart, so its shadows already match the map's (`docs/research/ctx-and-hirise-sun-angles.md`).
+
+**What we did.** We wrote the explanation into the results, corrected the research note, and added a rule to the project's working instructions: before a paper's finding sets a priority, quote it with its conditions and its passing cases, work out where our own setup sits on the paper's axis, and write down the predicted result before running anything. We also shelved a follow-up stress test, because the same research showed our renderer can't truly relight a photo with shadows baked in.
+
+**What it taught us.** "X caused failures" is half a finding. The other half is the conditions, and how many cases passed. Our result agreed with JPL's data and only disagreed with our summary of it. The cheap check belongs before the expensive work, not after the surprise.
+
 ## Headline results
 
 - **The pipeline runs end to end** (`docs/benchmarks/plain-mc.md`). 20 seeded descents over the Jezero mesh all got a fix, with errors of 1.38–6.12 m (median 2.73 m) at about 0.46 s per descent on the laptop GPU. Caveat: that's 0 failures in 20 at a *provisional* 12 m threshold, so the honest failure rate is "somewhere from 0 to 16%" (95% Wilson interval), and the descents are easier than flight. It proves the plumbing, not the reliability. That run used the 10 km tile with tilt capped at 3°.
