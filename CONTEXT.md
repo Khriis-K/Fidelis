@@ -21,8 +21,8 @@ Keeping only the K map keypoints with the highest detector scores across the who
 _Avoid_: Map window, map crop, subsampling
 
 **Failure**:
-A descent whose fix is more than r = 40 m from the truth in the map frame, or that gets no fix at all (counted separately). r is LVS's requirement and isn't tuned to a target rate (ADR 0003).
-_Avoid_: Miss (unqualified), r chosen for a 2–10% rate
+A descent whose fix is more than r = 40 m from the truth horizontally (east and north, ignoring height) in the map frame, or that gets no fix at all (counted separately). r is LVS's requirement, a radial horizontal error, and isn't tuned to a target rate (ADR 0003, decision 3 amended for #46). Height error is still recorded in the error vector; `error_m` and `map_frame_error_m` are 3D lengths.
+_Avoid_: Miss (unqualified), r chosen for a 2–10% rate, 3D error against the 40 m line
 
 **Map frame**:
 Positions measured relative to the matching map, after removing one whole-map offset between the map and the rendered scene. The offset is measured independently, by registering the two orbital images, and reported on its own.

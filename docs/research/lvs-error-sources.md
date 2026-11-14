@@ -132,6 +132,7 @@ The 2017 simulation used slightly tighter numbers: position error < 150 m horizo
 
 **Field test** (May 2019, helicopter, Mojave National Preserve and Death Valley; 17 flights, 656 runs; Johnson et al. 2020):
 - 83 runs inside the flight envelope, 393 in an expanded envelope, 656 total.
+- **Axis, re-read 2026-11-14 (#46):** Table 4 is titled "Horizontal Position Estimation Statistics" and its rows are the "99%tile Radial Horizontal Position Error" against the 40 m requirement (pp.10–11). Fig. 8 draws the 40 m requirement as a circle on horizontal scatter plots. So "radial" here means horizontal; this is from the text, not inferred.
 - 99%-tile radial error **[Garbled]**, read from a scrambled table: at 10 s, 14.3 / 24.3 / 55.4 m (flight / expanded / all); at 6 s, 16.0 / 30.5 / 44.5 m; end of coarse 158.0 / 135.3 / 169.3 m (Table 4).
 - All flight-envelope and expanded-envelope runs met 40 m. 6–7 of the rest didn't (section 3).
 - The 2016 field test gave 16.0 m against the 17.3 m budget (Johnson et al. 2017 Table 2).

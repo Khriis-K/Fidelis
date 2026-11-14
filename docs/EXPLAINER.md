@@ -276,6 +276,16 @@ A refresher for explaining Fidelis to recruiters. Plain English first, key techn
 
 **What it taught us.** A result of "it never fails" is a finding, not a dead end. It changes what you can claim, and the claim has to change with it.
 
+### Which way is 40 m? Settling the failure line's axis from the source tables
+
+**The problem.** Fidelis measured its error in 3D (east, north and height together), but LVS's requirement just said "40m accuracy". The axis mattered for the next experiment: a camera focal-length error mostly shifts the fix in height, so it looks much worse in 3D than horizontally.
+
+**How we noticed.** Our research note guessed "horizontal" and marked it as a guess, because JPL called a 45 m height error fine. A guess isn't enough to change the failure line, so it got its own decision ticket (#46).
+
+**What we did.** We reread the papers themselves, not the note. JPL's field-test table settles it: its 40 m row is the "Radial Horizontal Position Error" (Johnson et al. 2020, Table 4), and their 2016 simulation compared only horizontal numbers with the line. So failure is now a horizontal miss, with height still recorded. Before switching we recounted every stored scan both ways: no result moved across the line (still 0 misses everywhere), and medians dropped by at most about 0.5 m. That check was there to rule out picking the axis that made results look better.
+
+**What it taught us.** Read the table header, not the summary. And when a definition changes, recount the old results under both definitions first, so the change can't quietly move a headline.
+
 ## Headline results
 
 - **The pipeline runs end to end** (`docs/benchmarks/plain-mc.md`). 20 seeded descents over the Jezero mesh all got a fix, with errors of 1.38–6.12 m (median 2.73 m) at about 0.46 s per descent on the laptop GPU. Caveat: that's 0 failures in 20 at a *provisional* 12 m threshold, so the honest failure rate is "somewhere from 0 to 16%" (95% Wilson interval), and the descents are easier than flight. It proves the plumbing, not the reliability. That run used the 10 km tile with tilt capped at 3°.
@@ -287,6 +297,8 @@ A refresher for explaining Fidelis to recruiters. Plain English first, key techn
 - **The shading painted into the terrain photo can be divided out** (`docs/benchmarks/deshade.md`). In the photo, slopes facing the sun are 37% brighter than slopes facing away; in the de-shaded texture they are 1.6% darker, and flat ground keeps 97% of its fine detail. Caveats: only shading that follows the 4 m terrain is removed (not cast shadows or anything smaller), the east strip of the tile is barely corrected, the check covers the tile centre only, and so far only the stress-sun scan renders from it.
 
 - **A sun on the far side of the sky doubles the error, but nothing misses** (`docs/benchmarks/stress-sun-scan.md`). A stress case, not a failure rate. On one CARC A40, the same 300 descents were rendered from the de-shaded texture under suns 39°, 73°, 98° and 113° from the map's sun. All 1,200 got a fix within 40 m (each dose under 1.3% at 95% confidence). The median error rose steadily, 5.0 → 7.8 → 9.2 → 10.6 m, with no jump at JPL's 100° line, and the worst was 20.6 m, about half of r. Most of the growth is a shift away from the sun (from 4.7 to 9.9 m), not scatter. On the original photo the 113° sun cost only 0.6 m over the anchor, so the shading baked into the photo had been hiding the effect. Caveats: renders are still a relit photo, the east strip and outer ring keep their baked light, and 113° is the most a 25° sun can reach. Whether real images at that angle would miss isn't answered.
+
+- **Note on the error axis (#46).** The errors above are 3D lengths, as the write-ups quote them. Failure is now judged on horizontal error (ADR 0003 decision 3, amended), which is never larger. Recounted from the stored records, no result changes: 0 misses at 40 m in every scan either way, with medians lower by at most about 0.5 m.
 
 Numbers go here only once they're committed in `docs/benchmarks/` or `docs/adr/`, each with its caveat.
 

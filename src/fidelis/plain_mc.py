@@ -27,7 +27,7 @@ from statistics import NormalDist, median
 
 import yaml
 
-from fidelis.map_frame import MATCHING_MAPS
+from fidelis.map_frame import MATCHING_MAPS, horizontal_error_m
 from fidelis.render.mesh_render import PHOTO_TEXTURE
 from fidelis.scenario import MC_SEED_LIMIT, ScenarioConfig, draw, load_config, pin_sun
 from fidelis.simulation import SimulationRecord
@@ -49,12 +49,14 @@ def is_no_fix(record: SimulationRecord) -> bool:
 
 
 def is_beyond_r(record: SimulationRecord, r_m: float) -> bool:
-    """A fix more than r off in the map frame. Records from before ADR 0003 have no map-frame
-    error; their map was the scene's own, so the offset was zero and the true-frame error is it."""
+    """A fix more than r off horizontally, in the map frame. Height error doesn't count: LVS's 40 m
+    is a radial horizontal error (ADR 0003 decision 3, amended for #46). Records from before
+    ADR 0003 have no map-frame error; their map was the scene's own, so the offset was zero
+    and the true-frame error is it."""
     if is_no_fix(record):
         return False
-    error = record.error_m if record.map_frame_error_m is None else record.map_frame_error_m
-    return error > r_m
+    vector = record.error_vector if record.map_frame_error_vector is None else record.map_frame_error_vector
+    return horizontal_error_m(vector) > r_m
 
 
 def is_failure(record: SimulationRecord, r_m: float) -> bool:
@@ -105,7 +107,7 @@ class Estimate:
         return label + (
             f"P(fail) = {self.p:.3f} ({self.failures}/{self.n}: {self.no_fix} no fix, {self.beyond_r} beyond r),"
             f" {self.confidence:.0%} Wilson interval [{self.ci_low:.3f}, {self.ci_high:.3f}],"
-            f" at r = {self.r_m:g} m in the map frame; {offset}"
+            f" at r = {self.r_m:g} m horizontal, in the map frame; {offset}"
         )
 
 

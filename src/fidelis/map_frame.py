@@ -20,6 +20,7 @@ Convention: the offset is where the map puts a ground feature, less where the sc
 it, in metres east and north. It is horizontal, since image registration measures no height.
 """
 
+import math
 from dataclasses import dataclass
 
 
@@ -74,3 +75,9 @@ def map_frame_error(error_vector: list[float], offset: MapOffset) -> list[float]
     """A true-frame error vector (estimate minus truth, east-north-up) with the whole-map shift removed."""
     east, north, up = error_vector
     return [east - offset.east_m, north - offset.north_m, up]
+
+
+def horizontal_error_m(error_vector: list[float]) -> float:
+    """The east-north length of an east-north-up error: what LVS's 40 m line measures (ADR 0003 decision 3)."""
+    east, north, _ = error_vector
+    return math.hypot(east, north)

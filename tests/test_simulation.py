@@ -330,7 +330,9 @@ def test_the_scene_config_has_a_sun_for_every_sun_index_the_sampler_can_draw():
 def test_perfect_conditions_on_the_jezero_mesh_locate_within_half_a_ctx_map_pixel(altitude):
     # As the navigator's GPU test, but through the seam: the scenario's camera, the mesh
     # renderer, exposure from the camera model. Zenith sun so the shading adds nothing
-    # the map's orthoimage doesn't carry; half the 6 m map pixel is the tolerance.
+    # the map's orthoimage doesn't carry; half the 6 m map pixel is the tolerance. Measured
+    # in the map frame (ADR 0003 decision 4): against the CTX map the true-frame error also
+    # carries the map's own ~2.5 m offset, which is the map's, not the navigator's.
     from fidelis.render.mesh_render import Sun
     from fidelis.simulation import build_mesh_simulator
 
@@ -342,7 +344,7 @@ def test_perfect_conditions_on_the_jezero_mesh_locate_within_half_a_ctx_map_pixe
     s = scenario(offset_east_m=150.0, offset_north_m=-230.0, altitude_m=altitude)
     first = sim.run(s, "mesh").record
     assert first.status == "ok"
-    assert first.error_m < 3.0
+    assert first.map_frame_error_m < 3.0
     assert first.gpu != "cpu"
     # Same sample and seed, same camera image, up to the renderer's GPU jitter: within one
     # process camera images have differed by at most 5.36e-7 (scripts/check_gpu_repeatability.py).

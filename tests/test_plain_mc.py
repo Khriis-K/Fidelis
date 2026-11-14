@@ -1,5 +1,5 @@
 import json
-from dataclasses import asdict, fields
+from dataclasses import asdict, fields, replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -84,6 +84,28 @@ def test_a_miss_beyond_r_only_in_the_map_frame_is_a_failure():
     # 15 m west of truth against a map shifted 30 m east: 45 m off in the map frame.
     shifted = MapOffset(30.0, 0.0, "test")
     assert is_failure(record(error_m=-15.0, offset=shifted), r_m=40.0)
+
+
+def with_error(base, east, north, up):
+    """`base` with its fix moved to (east, north, up) of the truth; a zero map offset, so both frames agree."""
+    vector = [east, north, up]
+    length = float(np.linalg.norm(vector))
+    return replace(base, error_vector=vector, error_m=length, map_frame_error_vector=vector, map_frame_error_m=length)
+
+
+def test_height_error_alone_is_not_a_miss_because_the_40_m_line_is_horizontal():
+    # ADR 0003 decision 3, amended (#46): LVS's 40 m is a radial horizontal error (Johnson et al. 2020 Table 4).
+    assert not is_failure(with_error(record(), 10.0, 0.0, 60.0), r_m=40.0)
+
+
+def test_east_and_north_together_make_the_horizontal_miss():
+    # 30 m east and 30 m north is 42.4 m off horizontally, though neither axis alone passes 40 m.
+    assert is_failure(with_error(record(), 30.0, 30.0, 0.0), r_m=40.0)
+
+
+def test_an_older_record_is_judged_by_its_horizontal_error_too():
+    values = older_record() | {"error_vector": [20.0, 0.0, 50.0], "error_m": float(np.hypot(20.0, 50.0))}
+    assert not is_failure(SimulationRecord(**values), r_m=40.0)
 
 
 def test_the_jezero_r_is_lvss_40_m_requirement_with_its_source():
