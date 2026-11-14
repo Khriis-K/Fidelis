@@ -120,4 +120,75 @@ Run on 2026-11-13 to check the plumbing end to end. Seeds 30,004–30,005 (outsi
 
 ## Results
 
-Not run.
+**A stress case, not a failure rate.** Nothing below is the realistic failure rate (ADR 0003, decision 1).
+
+**Run on 2026-11-13.** One `sbatch` job on the debug partition, one NVIDIA A40, all five runs in sequence, as planned. Every record names the A40 and carries config SHA-256 `0c7decfd…`, which matches the committed `config/jezero.yaml` at `e9f5f9c`. Each run's records carry their own labels (sun list, texture, pinned sun), and every estimate is `stress_case: true`. Map keypoints: 58,866 in every run. Descents took a median 0.447–0.478 s, 11.6 minutes in all. The job's elapsed time and SUs weren't recorded here (no `sacct` output yet). **No departures from the plan.**
+
+### Headline: failures by sun (planned)
+
+**0 failures in 300 at every dose: 0 no-fix, 0 beyond r, at r = 40 m in the map frame.** 95% Wilson interval [0, 0.0126] for each.
+
+| Run | Sun difference | No fix | Beyond r | Map-frame error: median | 90th pct | Max | Inliers: median | Min |
+|---|---|---|---|---|---|---|---|---|
+| Anchor (310°/25°, de-shaded) | 39.0° | 0 | 0 | 5.02 m | 7.94 m | 10.54 m | 1,264 | 732 |
+| Stress 1 (357.37°/25°, de-shaded) | 73.4° | 0 | 0 | 7.76 m | 11.43 m | 17.43 m | 1,050 | 426 |
+| Stress 2 (37.37°/25°, de-shaded) | 98.3° | 0 | 0 | 9.15 m | 13.22 m | 19.02 m | 974 | 313 |
+| Stress 3 (87.37°/25°, de-shaded) | 112.6° | 0 | 0 | 10.55 m | 14.42 m | 20.57 m | 910 | 195 |
+| Stress 3 on the photo texture | 112.6° | 0 | 0 | 5.79 m | 7.84 m | 12.46 m | 1,163 | 580 |
+
+The worst descent at the top dose (seed 40161) was 20.57 m off, about half of r.
+
+### Error against sun difference (planned): the same seeds, against the anchor
+
+| Run | Change in error vs the anchor: mean | Median | 10th–90th pct | Seeds with a larger error | Inliers vs anchor (median ratio) | Rank correlation with the anchor's error |
+|---|---|---|---|---|---|---|
+| Stress 1 (73.4°) | +2.55 m | +2.43 m | −0.63 to +5.68 m | 255 / 300 | 0.84 | 0.48 |
+| Stress 2 (98.3°) | +3.91 m | +3.68 m | +0.06 to +8.11 m | 271 / 300 | 0.78 | 0.27 |
+| Stress 3 (112.6°) | +5.49 m | +5.68 m | +0.81 to +9.78 m | 285 / 300 | 0.71 | −0.13 |
+
+- **A steady dose-response, with no step at 100°.** The error rises and the inliers fall at every step. 73° → 98° adds +1.4 m to the median error and 98° → 113° adds +1.4 m, so crossing JPL's line does nothing special here.
+- **The sun, not the seed, comes to set the error.** At 73° a seed's error still tracks its anchor error (rank correlation 0.48). At 113° it no longer does (−0.13).
+
+### Against the photo-texture control (planned)
+
+The 112.6° sun on the original photo: median 5.79 m against 10.55 m de-shaded. The de-shaded error is larger in 296 of 300 seeds, by a median of +4.79 m. Against the anchor, the photo control moves the error by only +0.62 m (median), and gives a larger error in 180 of 300 seeds.
+
+**#19 did what it was built for.** On the photo, the baked lighting, which matches the map's, holds the render close to the map even under a sun on the opposite side of the sky. Once it is divided out, the opposite sun's effect over the anchor is about 9 times larger: a median of +5.68 m, against +0.62 m on the photo. Without #19 this scan would have shown almost no effect.
+
+### Exploratory (not planned as tests; labelled as such)
+
+**Most of the growth is a shift away from the sun.** This is the mean horizontal map-frame error over each run's 300 descents, and the scatter of each descent about that mean:
+
+| Run | Sun bearing | Mean shift: size | Mean shift: bearing | Scatter about it: median | 90th pct |
+|---|---|---|---|---|---|
+| Anchor | 310° | 4.67 m | 168° | 2.32 m | 4.29 m |
+| Stress 1 | 357° | 7.14 m | 210° | 2.92 m | 5.47 m |
+| Stress 2 | 37° | 8.42 m | 241° | 3.42 m | 6.14 m |
+| Stress 3 | 87° | 9.93 m | 274° | 3.55 m | 6.19 m |
+| Stress 3, photo | 87° | 5.38 m | 276° | 2.09 m | 3.79 m |
+
+- **The shift turns with the sun.** It points 187–218° from the sun's bearing, roughly away from the sun, at every dose. It grows by 5.3 m from the anchor to Stress 3, while the scatter grows by 1.2 m. Vertical error grows too, from a median of 1.30 m to 2.14 m.
+- **[Inference] The likely mechanism.** Keypoints sit on brightness edges, and shading moves the edges. A slope lit from the east is bright on its east face in the render, but bright on its west face in the map, which was lit from 267°. So matched points are offset consistently across the whole view, and the fix moves as a whole. This hasn't been checked feature by feature. It also means part of the anchor's 4.67 m shift is probably the same effect from a smaller sun difference, on top of the CTX map's own offset residual.
+- **Views in the east of the tile degrade less.** For Stress 3, the error's growth over the anchor correlates with the camera's east position at −0.49 (Spearman). Median error at Stress 3 by camera position: 11.81 m west of −1 km (41 descents), 10.80 m in the middle (207), and 8.37 m east of +1 km (52). That fits the east strip's texture keeping most of its baked light, which de-shading barely removed there (`deshade.md`). Not checked against each view's actual footprint.
+- **At other lines:** descents beyond 12 m numbered 0, 24, 55 and 85 from the anchor to Stress 3, and 1 for the photo control. Beyond 20 m: only seed 40161 at Stress 3.
+- **No-fix risk.** The fewest inliers at Stress 3 was 195. That is far above a lost match, but at a quarter of the anchor's minimum.
+
+### Against the prediction
+
+- **Anchor, Stress 1, Stress 2: 0 failures predicted, 0 seen.** This agrees with the source's 393 of 393 runs inside 100°.
+- **Stress 3:** the source gave no number for our conditions, and 0 were seen. The proxy predicted fewer inliers and larger errors than at the anchor, and both happened: median inliers ×0.71, median error 5.02 → 10.55 m.
+- **Photo control:** predicted to stay closer to the map than the de-shaded render. It did, in 296 of 300 seeds.
+
+### What it means
+
+Under the plan's own outcomes, this is **"0 failures at every dose: inconclusive"** for a failure mode. It is not "the navigator is immune to sun difference". What it does show, within this renderer:
+
+- **The navigator degrades steadily with sun difference, and nowhere near 40 m.** At the most this setup can reach (112.6°, a 25° sun), the median error doubles and the worst is half of r.
+- **It degrades as a shift away from the sun**, more than as scatter.
+
+The limits already stated hold:
+- The render is a relit photo, and shading finer than the 4 m DTM is still baked in.
+- The CTX ring and the east strip aren't de-shaded.
+- A larger dose needs a lower sun, and with it long cast shadows, which de-shading doesn't remove.
+
+JPL's misses came from a real camera over Earth dunes above 100°. Whether real images at 113° would miss more than these renders isn't something this scan can answer.
