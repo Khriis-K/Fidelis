@@ -189,7 +189,9 @@ scenario:
   # Column dust optical depth (#37, src/fidelis/render/haze.py). LVS's pre-launch tests varied
   # it from 0.5 to 1 (Johnson et al. 2017; docs/research/lvs-error-sources.md); the flight value
   # was about 0.47, at a wavelength our notes don't state (docs/research/dust-vertical-distribution.md).
-  # Uniform over the tested range is a Fidelis choice. A labelled range, not the landing-day haze.
+  # Uniform over the tested range is a Fidelis choice. A labelled range, not the landing-day haze:
+  # every run drawing it is hazy, so a P(fail) bound from it holds for tau 0.5-1 only
+  # (docs/benchmarks/dust-haze.md). Reruns of results from before #37 pass --clear-air.
   dust_tau: {dist: uniform, low: 0.5, high: 1.0}
 
 # Dust haze (#37, src/fidelis/render/haze.py): how the column's dust (scenario.dust_tau) is

@@ -79,14 +79,21 @@ def main() -> int:
         choices=MATCHING_MAPS,
         help="the map the run being pictured matched against, if not the config's",
     )
+    parser.add_argument(
+        "--clear-air",
+        action="store_true",
+        help="no dust haze (dust_tau = 0), as every run before #37 had; for reruns of those results",
+    )
     args = parser.parse_args()
 
-    from fidelis.scenario import draw, load_config, pin_sun
+    from fidelis.scenario import clear_air, draw, load_config, pin_sun
     from fidelis.simulation import build_simulator
 
     config = load_config(args.config)
     if args.sun_index is not None:
         config = pin_sun(config, args.sun_index)
+    if args.clear_air:
+        config = clear_air(config)
     simulator = build_simulator(args.config, args.data_dir, (args.fidelity,), matching_map=args.matching_map)
     run = simulator.run(draw(config, args.seed), args.fidelity)
     record, nav = run.record, run.nav

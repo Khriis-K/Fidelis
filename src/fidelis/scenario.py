@@ -181,6 +181,11 @@ def pin_sun(config: ScenarioConfig, sun_index: int) -> ScenarioConfig:
     return replace(config, sun_index=Integers(sun_index, sun_index))
 
 
+def clear_air(config: ScenarioConfig) -> ScenarioConfig:
+    """The same config with no dust haze, as every run before #37 had. Other draws don't change."""
+    return replace(config, dust_tau=Uniform(0.0, 0.0))
+
+
 def max_ground_reach_m(altitude_m: float, tilt_deg: float, fov_deg: float) -> float:
     """Farthest horizontal distance, over flat ground, that a square view can see.
 

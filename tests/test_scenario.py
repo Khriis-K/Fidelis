@@ -14,10 +14,12 @@ from fidelis.scenario import (
     FIELDS,
     MC_SEED_LIMIT,
     Integers,
+    Scenario,
     ScenarioConfig,
     TruncatedNormal,
     Uniform,
     check_fits_tile,
+    clear_air,
     draw,
     load_config,
     max_ground_reach_m,
@@ -290,6 +292,23 @@ def test_a_truncated_normal_bounded_deep_in_its_tail_is_refused():
     # cdf(9 sd) rounds to 1, which would crash every draw; refuse it up front.
     with pytest.raises(ValueError, match="tails"):
         TruncatedNormal(mean=0.0, sd=1.0, low=-1.0, high=9.0)
+
+
+def test_clear_air_draws_no_dust_and_leaves_every_other_input_unchanged():
+    # Reruns of results from before #37 had no haze, and must keep their other draws.
+    config = make_config()
+    for seed in (0, 5, 9):
+        hazy, clear = draw(config, seed), draw(clear_air(config), seed)
+        assert hazy.dust_tau > 0 and clear.dust_tau == 0.0
+        for name in FIELDS:
+            if name != "dust_tau":
+                assert getattr(clear, name) == getattr(hazy, name), name
+
+
+def test_a_scenario_without_dust_tau_has_no_haze():
+    # Records from before #37 carry no dust_tau; they had no haze.
+    values = {name: 1.0 for name in FIELDS if name != "dust_tau"} | {"seed": 0, "sun_index": 0}
+    assert Scenario(**values).dust_tau == 0.0
 
 
 def test_a_non_integer_sun_index_is_refused():

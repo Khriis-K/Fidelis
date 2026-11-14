@@ -5,8 +5,8 @@ import numpy as np
 import pytest
 
 from fidelis.render.camera import Intrinsics, look_at
-from fidelis.render.degrade import add_noise, camera_image, expose, motion_blur
-from fidelis.render.haze import add_haze, path_optical_depth, ray_cos_zenith, scenario_transmittance, transmittance
+from fidelis.render.degrade import add_haze, add_noise, camera_image, expose, motion_blur
+from fidelis.render.haze import path_optical_depth, ray_cos_zenith, scenario_transmittance, transmittance
 from fidelis.scenario import Scenario
 from fidelis.simulation import scenario_pose
 
@@ -138,9 +138,3 @@ def test_dust_without_a_scale_height_is_refused():
 
 def test_no_dust_needs_no_scale_height():
     assert scenario_transmittance(scenario(dust_tau=0.0), nadir_pose(), K, scale_height_m=None) == 1.0
-
-
-def test_a_scenario_without_dust_tau_has_none():
-    # Records from before #37 carry no dust_tau; they had no haze.
-    values = {k: v for k, v in scenario().__dict__.items() if k != "dust_tau"}
-    assert Scenario(**values).dust_tau == 0.0

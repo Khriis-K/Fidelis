@@ -60,16 +60,26 @@ def add_noise(image: np.ndarray, sd: float, rng: np.random.Generator) -> np.ndar
     return (image + rng.normal(0.0, sd, image.shape)).astype(np.float32)
 
 
-def camera_image(radiance: np.ndarray, scenario: Scenario, haze_transmittance=1.0) -> np.ndarray:
+def add_haze(radiance: np.ndarray, t: np.ndarray | float) -> np.ndarray:
+    """Radiance blended towards a veil as bright as its brightest ground, by transmittance t.
+
+    The airlight model (fidelis.render.haze). The veil is the percentile exposure is set
+    from, so the exposure doesn't move and contrast falls by exactly t.
+    """
+    veil = float(np.percentile(radiance, EXPOSURE_PERCENTILE))
+    return (radiance * t + veil * (1 - t)).astype(np.float32)
+
+
+def camera_image(radiance: np.ndarray, scenario: Scenario, haze_transmittance: np.ndarray | float = 1.0) -> np.ndarray:
     """The descent image the navigator gets: float32, in [0, 1].
 
     `haze_transmittance` (per pixel, or 1.0 for clear air; fidelis.render.haze) is applied
     first, since the dust sits between the ground and the lens.
     """
-    from fidelis.render.haze import add_haze  # haze imports this module's exposure percentile
-
     rng = np.random.default_rng([scenario.seed, zlib.crc32(b"camera_noise")])
     image = radiance.astype(np.float32)
+    # Clear air skips the blend (an identity at t = 1) and its percentile, so a clear-air
+    # descent's recorded cost stays what it was before #37.
     if not np.all(np.equal(haze_transmittance, 1.0)):
         image = add_haze(image, haze_transmittance)
     image = motion_blur(image, scenario.blur_px, scenario.blur_angle_deg)

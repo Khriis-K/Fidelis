@@ -10,7 +10,9 @@ column: with dust thinning as exp(-z/H), the share of the column below height h 
 1 - exp(-h/H). H comes from the scene config (`haze.dust_scale_height_m`), sourced in
 docs/research/dust-vertical-distribution.md.
 
-Two pessimistic choices, both from the prediction on #37:
+The blend itself is `fidelis.render.degrade.add_haze`, the camera model's first step; this
+module works out each pixel's transmittance t. Two pessimistic choices, both from the
+prediction on #37:
 - All the light the dust removes counts as veil, though Mars dust scatters mostly forward.
 - The veil is as bright as the brightest ground (the 99.9th percentile the exposure is set
   from), so exposure doesn't change and contrast falls by exactly t.
@@ -24,7 +26,6 @@ import math
 import numpy as np
 
 from fidelis.render.camera import CameraPose, Intrinsics
-from fidelis.render.degrade import EXPOSURE_PERCENTILE
 from fidelis.scenario import Scenario
 
 
@@ -46,12 +47,6 @@ def ray_cos_zenith(pose: CameraPose, intrinsics: Intrinsics) -> np.ndarray:
 def transmittance(path_tau: float, cos_zenith: np.ndarray) -> np.ndarray:
     """The fraction of the ground's light that survives the slant path through the dust."""
     return np.exp(-path_tau / cos_zenith)
-
-
-def add_haze(radiance: np.ndarray, t: np.ndarray | float) -> np.ndarray:
-    """Radiance blended towards a veil as bright as its brightest ground, by transmittance t."""
-    veil = float(np.percentile(radiance, EXPOSURE_PERCENTILE))
-    return (radiance * t + veil * (1 - t)).astype(np.float32)
 
 
 def scenario_transmittance(
