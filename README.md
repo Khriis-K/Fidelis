@@ -2,7 +2,7 @@
 
 **How often does a Mars lander's vision-based navigation fail, and how do you estimate that affordably and prove the estimate is right?**
 
-Fidelis (Latin for "faithful") is a Gaussian-splat-based Mars descent simulator. It estimates the failure probability of a vision-based terrain-relative navigation (TRN) system at Jezero Crater, using multifidelity Monte Carlo to keep the estimate affordable, and validates it against a brute-force reference.
+Fidelis (Latin for "faithful") is a Gaussian-splat-based Mars descent simulator. It measures how reliably a vision-based terrain-relative navigation (TRN) system locates itself at Jezero Crater. It bounds the failure probability with plain Monte Carlo, estimates the navigation error with multifidelity Monte Carlo to keep that affordable, and validates both against a brute-force reference. Multifidelity targets the error rather than the failure rate because the navigator hasn't failed under any condition tested so far ([ADR 0004](docs/adr/0004-reframe-when-failures-dont-happen.md)).
 
 > **Status: in development.** Built and measured so far: the Jezero scene, a path-traced renderer, the navigator, a Gaussian splat stand-in for the renderer, and plain Monte Carlo on a local GPU and the USC CARC cluster. The latest run found **no failures in 300 simulated descents** ([`docs/benchmarks/failure-scan.md`](docs/benchmarks/failure-scan.md)). That's because the simulation is kinder than flight: its map and its descent images come from the same photo. Realistic error sources are being added one at a time ([ADR 0003](docs/adr/0003-failure-is-40m-in-the-map-frame.md)). The first is in: against the real LVS map (the USGS CTX mosaic) the errors nearly doubled, but still no descent in 300 missed by more than 40 m, and the worst was 10 m ([`docs/benchmarks/ctx-map-scan.md`](docs/benchmarks/ctx-map-scan.md)). Dust haze, camera calibration and attitude error are next. Not built yet: cheaper fidelity levels that work (map thinning didn't; [`docs/benchmarks/fidelity-sweep.md`](docs/benchmarks/fidelity-sweep.md)), multifidelity estimation, validation, and the viewer. Steps below describe the planned system unless they say otherwise. Every number lives in [`docs/benchmarks/`](docs/benchmarks/) with its caveats. Progress is tracked in [GitHub Issues](https://github.com/Khriis-K/Fidelis/issues) and [milestones](https://github.com/Khriis-K/Fidelis/milestones).
 
@@ -49,7 +49,7 @@ You can't test-land on Mars, so reliability has to come from thousands of simula
 | M1: Smoke tests | Every core library runs on a local GPU and on the cluster |
 | M2: End-to-end plain Monte Carlo | One command goes from a Jezero tile to a failure probability with a confidence interval, plus a match visualization for any descent |
 | M3: Fidelity ladder and estimator comparison | Cheaper fidelity levels (navigator variants), a pilot study, and MFMC, MLMC, and ACV vs. plain Monte Carlo. The first showable result. |
-| M4: Fine-tuning | Fine-tuned vs. pretrained matcher failure probability |
+| M4: Fine-tuning | Fine-tuned vs. pretrained matcher navigation error |
 | M5: Lighting and validation | Multiple sun angles, brute-force reference, predicted vs. observed variance |
 | M6: Viewer and write-up | Public replay viewer centered on the descent-camera view with live match overlay, highlight video, full write-up |
 
