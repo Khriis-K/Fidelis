@@ -50,3 +50,6 @@ Thumbs.db
 .claude/settings.local.json
 .claude/.implement-ran
 .claude/.review-ran
+
+# Session handoff notes (local only)
+docs/handoffs/

@@ -85,13 +85,14 @@ To pick an A100 size, add `--constraint=a100-40gb` or `--constraint=a100-80gb`. 
   The A40 is on both `gpu` and `debug`; debug jobs are limited to 1 h. Earlier timings on L40S (the plain MC and splat runs) aren't comparable with A40 costs.
 - **L40S availability is an input to that choice.** The evening of 2026-11-10, `squeue -p gpu` listed 78 pending L40S jobs (65 on Priority, 13 on dependencies) and 7 running, using 9 L40S GPUs on nodes b17-16, b18-16, b18-17 and b18-18. A 30-minute single-L40S job of ours (14002051) sat pending on Priority behind them. One snapshot, not a wait-time measurement; the user reports L40S waits have been long lately. Job 14002051 ended `CANCELLED` without ever getting a node (`sacct`, checked 2026-11-11), so there's no L40S descent profile.
 - **Snapshot, 2026-11-11.** `noderes -f -g` showed 2 free A40s (b11-09, debug partition, idle) and 2 free P100s, and nothing free on the `gpu` partition. On `squeue -p gpu`, single-GPU jobs that named a type had these pending and running counts: A100 158 / 8, A40 114 / 26, L40S 30 / 3. Another 577 untyped single-GPU jobs were pending. One snapshot again.
+- **Endeavour: not an option (checked 2026-11-11).** The user can log in to `endeavour2`, CARC's condo cluster. Every GPU partition in `noderes -f -g` there is named after an owning group (`ruska`, `cryoem`, `fibril`, `qcbgpu`, ...), apart from one V100 node on `shared`; there is no `gpu` partition (`squeue -p gpu` printed nothing). It keeps its own job database: `sacct -j 14002051` (a Discovery job) found nothing. The CARC User Portal lists no Endeavour allocation for the user, only Discovery ones (`irahbari_1147`, `ruishanl_1185`). `sacctmgr show assoc user=$USER`, run on endeavour2, lists only two associations, both on cluster `discovery` (`irahbari_1147` and `ruishanl_1185`) and none on Endeavour, so neither account can submit jobs there. Revisit only if the course or lab gets an Endeavour condo allocation.
 
 ## Storage [CARC]
 
 | Path | Quota | Backed up | Use in Fidelis |
 |---|---|---|---|
 | `/home1/$USER` | 100 GB, 1.91 M files | Yes, plus 2 weeks of snapshots | Config files only. CARC says not to run I/O-heavy jobs or coding agents from here. |
-| `/project2/irahbari_1147` | 1 TiB, 6 M files, shared by the whole course. 30 GiB used as of 2026-10-28. | Snapshots only (2 weeks) | Raw USGS data, splat checkpoints, final results. Anything expensive to regenerate. Fidelis lives at `/project2/irahbari_1147/ckuizon/fidelis/`. |
+| `/project2/irahbari_1147` | 1 TiB, 6 M files, shared by the whole course. 30 GiB used as of 2026-10-28; 82 GiB as of 2026-11-11 (user's quota page). | Snapshots only (2 weeks) | Raw USGS data, splat checkpoints, final results. Anything expensive to regenerate. Fidelis lives at `/project2/irahbari_1147/ckuizon/fidelis/`. |
 | `/scratch1/$USER` | 10 TB, 20 M files | No | Intermediate renders, uv cache, run outputs that the workflow can rebuild |
 | `$TMPDIR` | Node-local, RAM-backed | No | Per-job staging. It counts against `--mem`. [Places] |
 
