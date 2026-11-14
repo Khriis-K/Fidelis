@@ -42,6 +42,7 @@ def make_config(**overrides) -> ScenarioConfig:
         "blur_angle_deg": Uniform(0.0, 180.0),
         "exposure_gain": TruncatedNormal(mean=1.0, sd=0.1, low=0.7, high=1.3),
         "sun_index": Integers(0, 4),
+        "dust_tau": Uniform(0.0, 1.5),
     }
     dists.update(overrides)
     return ScenarioConfig(**dists)

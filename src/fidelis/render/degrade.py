@@ -1,7 +1,8 @@
-"""From rendered radiance to what the descent camera records: exposure, motion blur, noise.
+"""From rendered radiance to what the descent camera records: haze, exposure, motion blur, noise.
 
-In that order, as in the camera: light smears across pixels during the exposure, the
-sensor reads it out with noise, and the result clips to full scale.
+In that order, as in the camera: dust haze (fidelis.render.haze) veils the scene, light
+smears across pixels during the exposure, the sensor reads it out with noise, and the
+result clips to full scale.
 
 Exposure. LCAM had no automatic exposure: it was set beforehand from radiometric
 predictions, and flight images came out at about 0.6x their target
@@ -59,9 +60,18 @@ def add_noise(image: np.ndarray, sd: float, rng: np.random.Generator) -> np.ndar
     return (image + rng.normal(0.0, sd, image.shape)).astype(np.float32)
 
 
-def camera_image(radiance: np.ndarray, scenario: Scenario) -> np.ndarray:
-    """The descent image the navigator gets: float32, in [0, 1]."""
+def camera_image(radiance: np.ndarray, scenario: Scenario, haze_transmittance=1.0) -> np.ndarray:
+    """The descent image the navigator gets: float32, in [0, 1].
+
+    `haze_transmittance` (per pixel, or 1.0 for clear air; fidelis.render.haze) is applied
+    first, since the dust sits between the ground and the lens.
+    """
+    from fidelis.render.haze import add_haze  # haze imports this module's exposure percentile
+
     rng = np.random.default_rng([scenario.seed, zlib.crc32(b"camera_noise")])
-    image = motion_blur(radiance.astype(np.float32), scenario.blur_px, scenario.blur_angle_deg)
+    image = radiance.astype(np.float32)
+    if not np.all(np.equal(haze_transmittance, 1.0)):
+        image = add_haze(image, haze_transmittance)
+    image = motion_blur(image, scenario.blur_px, scenario.blur_angle_deg)
     image = add_noise(expose(image, scenario.exposure_gain), scenario.noise_sd, rng)
     return np.clip(image, 0, 1)

@@ -50,6 +50,7 @@ from fidelis.nav.navigator import Navigator, NavResult
 from fidelis.nav.orbital_map import OrbitalMap, load_lvs_map, load_orbital_map, load_terrain
 from fidelis.render.camera import CameraPose, Intrinsics, look_at
 from fidelis.render.degrade import camera_image
+from fidelis.render.haze import scenario_transmittance
 from fidelis.scenario import Scenario
 from fidelis.stress import CUSTOM_SUNS, PHOTO_TEXTURE, REALISTIC_SUNS, TEXTURES, check_sun_list, suns_for
 from fidelis.terrain.fetch import sha256_of
@@ -138,6 +139,7 @@ class Simulator:
         matching_map: str | None = None,
         sun_list: str = REALISTIC_SUNS,
         texture: str = PHOTO_TEXTURE,
+        dust_scale_height_m: float | None = None,
     ):
         check_sun_list(sun_list)
         if texture not in TEXTURES:
@@ -152,6 +154,8 @@ class Simulator:
         # DTM is the scene's (tests, and the scene's own map).
         self.ground_height = ground_height or navigator.map.ground_height
         self.matching_map = matching_map
+        # The haze's vertical profile (fidelis.render.haze). Without one, a scenario with dust is refused.
+        self.dust_scale_height_m = dust_scale_height_m
         self._thinned: dict[int, Navigator] = {}
         self.gpu = torch.cuda.get_device_name() if navigator.device.startswith("cuda") else "cpu"
 
@@ -167,7 +171,8 @@ class Simulator:
             renderer.use_sun(scenario.sun_index)
         start = time.perf_counter()
         radiance = renderer(pose, self.intrinsics, scenario.sun_index, scenario.seed)
-        image = camera_image(radiance, scenario)
+        haze = scenario_transmittance(scenario, pose, self.intrinsics, self.dust_scale_height_m)
+        image = camera_image(radiance, scenario, haze)
         nav = navigator.locate(image, self.intrinsics, pose.rotation)
         cost = time.perf_counter() - start
 
@@ -292,6 +297,7 @@ def build_simulator(
         matching_map=source,
         sun_list=sun_list,
         texture=texture,
+        dust_scale_height_m=scene["haze"]["dust_scale_height_m"]["value"],
     )
 
 

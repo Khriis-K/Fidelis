@@ -186,6 +186,25 @@ scenario:
   # Suggested: the landing-day sun (257 deg az, 40 deg el) plus the corners of LVS's design
   # box, 240-310 deg az by 25-55 deg el.
   sun_index: {dist: integers, low: 0, high: 4}
+  # Column dust optical depth (#37, src/fidelis/render/haze.py). LVS's pre-launch tests varied
+  # it from 0.5 to 1 (Johnson et al. 2017; docs/research/lvs-error-sources.md); the flight value
+  # was about 0.47, at a wavelength our notes don't state (docs/research/dust-vertical-distribution.md).
+  # Uniform over the tested range is a Fidelis choice. A labelled range, not the landing-day haze.
+  dust_tau: {dist: uniform, low: 0.5, high: 1.0}
+
+# Dust haze (#37, src/fidelis/render/haze.py): how the column's dust (scenario.dust_tau) is
+# spread with height. The share below a camera h up is 1 - exp(-h / H).
+haze:
+  dust_scale_height_m:
+    # The central case of docs/research/dust-vertical-distribution.md (section 4): a Conrath
+    # profile with its dust top at 20 km. Its bounds: 11000 (dust well mixed with the gas, the
+    # least haze) and 5700 (a 10 km dust top, the most). Confidence is low; the profile over
+    # Jezero on landing day isn't measured.
+    value: 7400
+    source: >-
+      Conrath 1975, Icarus 24, eq. 22 (settling-mixing profile); Smith et al. 2013, JGR Planets 118,
+      doi:10.1002/jgre.20047, section 4.2: dust "is confined within 10-20 km of the surface when the
+      column-integrated optical depth of dust is low". H_eff [Computed] in the research note.
 
 # The sun angles the mesh renderer lights the scene with; scenario.sun_index picks one,
 # so there must be as many as sun_index can draw. These are the five suggested above: the

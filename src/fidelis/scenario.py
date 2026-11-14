@@ -3,7 +3,7 @@
 A scenario is one simulated descent's operating conditions: where the camera truly is
 (offset from the tile centre, altitude above the ground beneath it), how it's pointed
 (tilt off nadir, the direction of that tilt, heading), how the image is degraded
-(noise, motion blur, exposure), and which pre-rendered sun angle lights it.
+(noise, motion blur, exposure, dust haze), and which pre-rendered sun angle lights it.
 
 Every input has its own random stream, seeded by (seed, a hash of the input's name), so
 retuning one input's distribution leaves every other input of a seed unchanged. All
@@ -126,6 +126,8 @@ class Scenario:
     blur_angle_deg: float  # direction of that blur in the image
     exposure_gain: float  # brightness multiplier on the rendered image
     sun_index: int  # which pre-rendered sun angle lights the scene
+    # Column dust optical depth (#37; fidelis.render.haze). 0 in records from before #37: no haze.
+    dust_tau: float = 0.0
 
 
 FIELDS = tuple(f.name for f in fields(Scenario) if f.name != "seed")
@@ -144,6 +146,7 @@ class ScenarioConfig:
     blur_angle_deg: Distribution
     exposure_gain: Distribution
     sun_index: Integers
+    dust_tau: Distribution
 
     @classmethod
     def from_dict(cls, section: dict) -> "ScenarioConfig":
