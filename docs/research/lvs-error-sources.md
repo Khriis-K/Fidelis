@@ -95,6 +95,8 @@ The 2017 simulation used slightly tighter numbers: position error < 150 m horizo
 
 **Focal length.** The calibration estimate of LCAM focal length "can be as large as 1%". With ±1% added to the MRL camera parameters, "errors can be as large as 17m horizontally" when the camera looks off nadir: 16.9 m (99%), allocation 20 m, the largest term in the 2017 budget (Johnson et al. 2017 p.11, Table 2). The paper said more accurate calibration would be investigated. Monte Carlo drew it Gaussian within ±1% (p.12). LCAM was later calibrated with a dot-grid target measured by 3D metrology and a CAHVORE model (Johnson et al. 2023, LCAM section). **The post-calibration focal-length uncertainty: not found.**
 
+*Searched again 2026-11-14 for #38, still not found.* Three web searches (LCAM / CAHVORE calibration accuracy, the Mars 2020 Engineering Cameras paper, the LVS flight-performance paper). The search results only point at the Engineering Cameras paper (Maki et al. 2020, *Space Science Reviews*), which lists LCAM's 5.8 mm focal length and 90° field of view and describes CAHVORE calibration of the flight cameras. Its full text wasn't read here, and the search summaries give no LCAM focal-length uncertainty or residual. The one CAHVORE residual that came up (about 1/30 pixel RMS) is a JPL synthetic-image test of rover cameras, not LCAM, so it doesn't count. Next places to look, if it's ever worth the effort: Maki et al. 2020's full text, and the journal version of Johnson et al. 2023 (source 4). Until then #38 stays a **labelled range** up to the pre-calibration ±1%.
+
 **Lens distortion.** LCAM has 18% radial distortion at the image edge, corrected with a lookup table (Johnson et al. 2017 p.8, p.11). Fidelis renders a distortion-free pinhole camera. Calibration *residual* after correction: **not found**.
 
 **Other LCAM errors** (detector noise, distortion, falloff, opposition effect) together gave about 1.1 m (Johnson et al. 2017 p.11).
@@ -185,7 +187,7 @@ Not a failure mode: attitude error up to 5° and exposure off by 4× both worked
 ## Not found
 
 - The **sigma level** of the 0.5° per-axis attitude error and of the 0.15° / 0.075° attitude initialization. Sources say "less than" and use them in 99%-tile budgets.
-- **Post-calibration LCAM focal-length uncertainty** and **lens-distortion residual** for the flight camera.
+- **Post-calibration LCAM focal-length uncertainty** and **lens-distortion residual** for the flight camera. Searched again 2026-11-14 (section 4); still not found.
 - **Sizes of the camera timing delays** (bias and standard deviation) in the LVSS LCAM model, and of camera-to-IMU latency.
 - The **correlation length** (or spectrum) of the local map-distortion field JPL simulated.
 - The **number or fraction of failed runs** in the pre-flight Jezero Monte Carlo (results are only in a figure, Johnson et al. 2022 Fig. 8).
