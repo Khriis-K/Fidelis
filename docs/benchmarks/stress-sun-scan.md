@@ -122,7 +122,7 @@ Run on 2026-11-13 to check the plumbing end to end. Seeds 30,004–30,005 (outsi
 
 **A stress case, not a failure rate.** Nothing below is the realistic failure rate (ADR 0003, decision 1).
 
-**Run on 2026-11-13.** One `sbatch` job on the debug partition, one NVIDIA A40, all five runs in sequence, as planned. Every record names the A40 and carries config SHA-256 `0c7decfd…`, which matches the committed `config/jezero.yaml` at `e9f5f9c`. Each run's records carry their own labels (sun list, texture, pinned sun), and every estimate is `stress_case: true`. Map keypoints: 58,866 in every run. Descents took a median 0.447–0.478 s, 11.6 minutes in all. The job's elapsed time and SUs weren't recorded here (no `sacct` output yet). **No departures from the plan.**
+**Run on 2026-11-13.** SLURM job 14223910, debug partition, node b11-09, one NVIDIA A40, all five runs in sequence in one `sbatch` job, as planned. `COMPLETED` in 12 min 31 s (`sacct`). At 24 SUs a minute that is about 300 SUs [Computed], at the bottom of the plan's 300–360 estimate. Every record names the A40 and carries config SHA-256 `0c7decfd…`, which matches the committed `config/jezero.yaml` at `e9f5f9c`. Each run's records carry their own labels (sun list, texture, pinned sun), and every estimate is `stress_case: true`. Map keypoints: 58,866 in every run. Descents took a median 0.447–0.478 s, 11.6 minutes in all. **No departures from the plan.**
 
 ### Headline: failures by sun (planned)
 
