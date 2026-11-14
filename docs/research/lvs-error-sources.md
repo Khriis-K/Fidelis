@@ -180,6 +180,8 @@ Not a failure mode: attitude error up to 5° and exposure off by 4× both worked
 | Detector noise, exposure, blur | See `edl-dispersions-for-scenario-sampler.md` | **Yes** | Already in |
 | Terrain relief and slope beyond envelope | > 150 m relief, > 15° slope caused retries | Real Jezero terrain | Already in (whatever Jezero has) |
 
+**Dust haze: how much of τ is below the camera.** `dust-vertical-distribution.md` (2026-11-14) sources the vertical profile for #37. Dust well mixed with the gas (H ≈ 11 km) puts 18–20% of column τ below 2.2–2.45 km, but that's the low-haze end: low-dust-season dust tops of 10–20 km (Smith et al. 2013) give 26–35%, an effective H of about 5.7–7.4 km [Computed]. It also flags that the wavelength of the 0.47 τ above is unknown; if it's infrared, visible τ is about 2.25× larger.
+
 ## Not found
 
 - The **sigma level** of the 0.5° per-axis attitude error and of the 0.15° / 0.075° attitude initialization. Sources say "less than" and use them in 99%-tile budgets.
