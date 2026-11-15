@@ -4,7 +4,7 @@ ADR 0005 decision 2 makes multifidelity one bounded experiment. This file fixes 
 
 ## Plan
 
-**Status: draft, not yet run.** Nothing below is a measurement, except the numbers marked as computed from existing records.
+**Status: committed before any run (`36a4dd7`), then step 0 ran: no-go (see Results).** Nothing in the Plan or Prediction sections is a measurement, except the numbers marked as computed from existing records.
 
 ### Why it runs again, and what changed since the first sweep
 
@@ -85,6 +85,36 @@ Computed from the combined scan's 300 records (seeds 60,000–60,299). These are
 - **What that demands of a cheap level.** Under MFMC with one cheap level, the ratio is (√(1 − ρ²) + ρ√w)². To beat 0.20 it needs, for example, ρ = 0.95 at under 2.0% of the real navigator's cost, ρ = 0.98 at under 6.4%, or ρ = 0.99 at just under 9.6% **[Computed]**.
 - **What we know of the cost floor.** On the splat, cost stopped falling at about 30% of the real navigator, with about 0.07 s of non-matching stages on an A40 (`fidelity-sweep.md`, `descent-profile.md`). The mesh render costs more than the splat's (0.234 against 0.184 s per descent on an L40S, `splat.md`). The real navigator's mesh descent here is 0.503 s with haze. **[Inference]** The mesh floor is likely 20–30% of the real navigator.
 - **Prediction: no-go**, likely at step 0 on cost alone. A go would need a thinned navigator under about 10% of the real one's cost and correlating at 0.99, which no level has come near on either renderer. **[Inference]** The sources don't cover navigator-fidelity correlation, so this rests on our own records only.
+
+## Results
+
+**Step 0 ran on 2026-11-14.** SLURM job 14259865, debug partition, node b11-09, one NVIDIA A40, both runs in one job as planned. `COMPLETED` in 56 s (`sacct`), about 22 SUs at 24 a minute **[Computed]**, under the plan's estimate of 50. Every record names the A40 and carries config SHA-256 `0e7ccb36…`, the combined scan's. Seeds 70,300–70,329 ran in both levels. Haze, focal error and attitude error were drawn in every record. `mesh` matched 58,866 map keypoints and `mesh-k1000` matched 1,000. **No departures from the plan.**
+
+### The rule's answer
+
+| Level | Median cost s | Min | Max |
+|---|---|---|---|
+| mesh | 0.5134 | 0.4453 | 0.6735 |
+| mesh-k1000 | 0.3140 | 0.2865 | 0.4562 |
+
+**Cost ratio 0.612,** against the bar of 0.22. Bootstrapping the 30 seeds of each level (5,000 resamples) gives a 90% interval of [0.580, 0.631] on the ratio of medians **[Computed]**. That is nearly three times the bar.
+
+**No-go, from the cost floor.** Under MFMC no level can get its variance ratio below its cost ratio, and the cheapest level costs 61% of the real navigator. The free formula's control variate gives 0.20–0.22. So no thinned level can beat it, however well it correlates. The ACV case rests on the spot check in step 0, not a proof. The full sweep doesn't run. Per ADR 0005 decision 2, M5 shrinks to writing this up.
+
+### Prediction against result
+
+| Predicted | Result | Held? |
+|---|---|---|
+| No-go, likely at step 0 on cost alone | No-go at step 0 | Yes |
+| **[Inference]** The mesh floor is likely 20–30% of the real navigator | 61% | **No**, about twice as high |
+
+The verdict held, and the cost estimate was wrong. The floor came from the splat. On the splat, matching was 75% of a descent and the render 2% (`descent-profile.md`). **[Inference]** On the mesh with haze, the stages that don't depend on the map (render, haze, camera model, descent keypoints) take about 0.3 s, so cutting the map saves at most about 0.2 s. The mesh renderer still hasn't been profiled, so the split isn't measured. It doesn't change the verdict: even a level costing only those stages would sit near 0.6.
+
+### Exploratory, not part of the rule
+
+- **The cheapest level fails often.** `mesh-k1000` got a fix on 21 of 30 seeds (6 `no_solution`, 3 `too_few_matches`), with a median of 24 inliers. The real navigator got a fix on all 30, horizontal error median 3.97 m, worst 13.65 m.
+- **On the 21 paired seeds, ρ = 0.67.** At that correlation and cost, the MFMC ratio would be about (√(1 − 0.45) + 0.67·√0.61)² ≈ 1.6, worse than plain MC **[Computed]**. 21 seeds is too few to rely on.
+- **The formula is a real saving on its own.** A control variate on it would bring the variance on mean horizontal error to about 0.2 × plain MC's (computed on combined-scan records, `combined-scan.md` seeds). The formula only reads the scenario's inputs, so the saving costs nothing. That is classic variance reduction, not multifidelity. Whether #21 should show it is a separate decision.
 
 ## What this doesn't settle
 
