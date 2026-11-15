@@ -79,23 +79,31 @@ def load_sweep(sweep_dir: Path) -> dict[str, Records]:
     }
 
 
-def paired_errors(levels: list[Records], seeds) -> np.ndarray:
-    """errors[i, j]: level i's error_m on the j-th seed where every level got a fix. Seeds may repeat."""
+def total_error(record: SimulationRecord) -> float:
+    """The 3D error this sweep was scored on, `error_m`."""
+    return record.error_m
+
+
+def paired_errors(levels: list[Records], seeds, error=total_error) -> np.ndarray:
+    """errors[i, j]: level i's `error` on the j-th seed where every level got a fix. Seeds may repeat."""
     kept = [s for s in seeds if all(level[s].status == "ok" for level in levels)]
-    return np.array([[level[s].error_m for s in kept] for level in levels])
+    return np.array([[error(level[s]) for s in kept] for level in levels])
 
 
 def median_cost(level: Records, seeds) -> float:
     return float(np.median([level[s].cost_s for s in seeds]))
 
 
-def variance_ratio(costs: np.ndarray, covariance: np.ndarray, budget: float = BUDGET) -> float | None:
-    """MXMCPy's MFMC variance at `budget` real-model runs, over plain MC's at the same budget.
+def variance_ratio(
+    costs: np.ndarray, covariance: np.ndarray, budget: float = BUDGET, method: str = "mfmc"
+) -> float | None:
+    """MXMCPy's variance for `method` ("mfmc", "acvmf", ...) at `budget` real-model runs, over plain MC's
+    at the same budget.
 
-    None when MFMC can't use the models in this order (its correlation ordering fails).
+    None when the method can't use the models in this order (MFMC's correlation ordering fails).
     """
     try:
-        result = Optimizer(costs, covariance=covariance).optimize("mfmc", budget * costs[0])
+        result = Optimizer(costs, covariance=covariance).optimize(method, budget * costs[0])
     except Exception:  # MXMCPy raises its own InconsistentModelError and friends
         return None
     plain_mc = covariance[0, 0] / budget
@@ -103,18 +111,20 @@ def variance_ratio(costs: np.ndarray, covariance: np.ndarray, budget: float = BU
     return ratio if np.isfinite(ratio) else None
 
 
-def set_ratio(sweep: dict[str, Records], names: tuple[str, ...], seeds) -> float | None:
-    levels = [sweep[REAL]] + [sweep[n] for n in names]
-    errors = paired_errors(levels, seeds)
+def set_ratio(
+    sweep: dict[str, Records], names: tuple[str, ...], seeds, method="mfmc", error=total_error, real=REAL
+) -> float | None:
+    levels = [sweep[real]] + [sweep[n] for n in names]
+    errors = paired_errors(levels, seeds, error)
     if errors.shape[1] < 3:
         return None
     costs = np.array([median_cost(level, seeds) for level in levels])
-    return variance_ratio(costs, np.atleast_2d(np.cov(errors)))
+    return variance_ratio(costs, np.atleast_2d(np.cov(errors)), method=method)
 
 
-def level_stats(sweep: dict[str, Records], name: str, seeds) -> LevelStats:
-    real, level = sweep[REAL], sweep[name]
-    errors = paired_errors([real, level], seeds)
+def level_stats(sweep: dict[str, Records], name: str, seeds, error=total_error, real=REAL) -> LevelStats:
+    real, level = sweep[real], sweep[name]
+    errors = paired_errors([real, level], seeds, error)
     return LevelStats(
         name=name,
         k=parse_fidelity(name)[1],
@@ -132,6 +142,33 @@ def best(sweep: dict[str, Records], options: list[tuple[str, ...]], seeds) -> tu
     return (min(usable, key=usable.get) if usable else None), ratios
 
 
+def gate_failures(sweep: dict[str, Records], candidates: list[str], ceiling: float, shuffle_rho: float) -> list[str]:
+    """The null-case gates: a trustworthy ceiling, a shuffle that kills the correlation, honest K."""
+    failures = []
+    if not ceiling >= CEILING_MIN:
+        failures.append(f"ceiling correlation {ceiling:.3f} < {CEILING_MIN}")
+    if not abs(shuffle_rho) < SHUFFLE_MAX:
+        failures.append(f"shuffled correlation {shuffle_rho:.3f} not within ±{SHUFFLE_MAX}")
+    for name in candidates:
+        k = parse_fidelity(name)[1]
+        wrong = {r.map_keypoints for r in sweep[name].values()} - {k}
+        if wrong:
+            failures.append(f"{name}: map_keypoints {sorted(wrong)} in its records, not {k}")
+    return failures
+
+
+def mark_eligible(stats: list[LevelStats], ceiling: float, real_cost: float) -> None:
+    """Eligibility: tracks the real navigator, rarely disagrees on getting a fix, and is cheaper."""
+    for s in stats:
+        if s.rho < RHO_FRACTION * ceiling:
+            s.reasons.append(f"correlation {s.rho:.3f} < {RHO_FRACTION} x ceiling")
+        if s.disagreements > MAX_DISAGREEMENTS:
+            s.reasons.append(f"{s.disagreements} fix-or-not disagreements > {MAX_DISAGREEMENTS}")
+        if s.cost_s > COST_FRACTION * real_cost:
+            s.reasons.append(f"cost {s.cost_s:.3f} s > {COST_FRACTION} x real")
+        s.eligible = not s.reasons
+
+
 def apply_rule(sweep: dict[str, Records], seed: int = 0) -> Report:
     selection = list(SELECTION)
     candidates = sorted((n for n in sweep if parse_fidelity(n)[1] is not None), key=lambda n: parse_fidelity(n)[1])
@@ -143,26 +180,9 @@ def apply_rule(sweep: dict[str, Records], seed: int = 0) -> Report:
     errors = paired_errors([sweep[REAL], sweep[candidates[0]]], selection)
     shuffle_rho = float(np.corrcoef(errors[0], rng.permutation(errors[1]))[0, 1])
 
-    failures = []
-    if not ceiling >= CEILING_MIN:
-        failures.append(f"ceiling correlation {ceiling:.3f} < {CEILING_MIN}")
-    if not abs(shuffle_rho) < SHUFFLE_MAX:
-        failures.append(f"shuffled correlation {shuffle_rho:.3f} not within ±{SHUFFLE_MAX}")
-    for name in candidates:
-        k = parse_fidelity(name)[1]
-        wrong = {r.map_keypoints for r in sweep[name].values()} - {k}
-        if wrong:
-            failures.append(f"{name}: map_keypoints {sorted(wrong)} in its records, not {k}")
-
+    failures = gate_failures(sweep, candidates, ceiling, shuffle_rho)
     stats = [level_stats(sweep, n, selection) for n in candidates]
-    for s in stats:
-        if s.rho < RHO_FRACTION * ceiling:
-            s.reasons.append(f"correlation {s.rho:.3f} < {RHO_FRACTION} x ceiling")
-        if s.disagreements > MAX_DISAGREEMENTS:
-            s.reasons.append(f"{s.disagreements} fix-or-not disagreements > {MAX_DISAGREEMENTS}")
-        if s.cost_s > COST_FRACTION * real_cost:
-            s.reasons.append(f"cost {s.cost_s:.3f} s > {COST_FRACTION} x real")
-        s.eligible = not s.reasons
+    mark_eligible(stats, ceiling, real_cost)
 
     report = Report(real_cost, ceiling, shuffle_rho, failures, stats)
     if failures:
