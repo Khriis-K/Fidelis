@@ -400,3 +400,21 @@ rule match_viz:
         runtime=20,
     shell:
         f"fidelis-match-viz config/jezero.yaml {JEZERO} {{wildcards.seed}} {{output}} {OLD_MAP}"
+
+
+# Error against sun difference, and the exceedance curve, from saved records only (#22,
+# docs/benchmarks/sun-degradation.md). No descents are rendered. `snakemake sun_degradation`.
+rule sun_degradation:
+    input:
+        ancient(CONFIG),
+        expand("results/certified_bound/batch{i}/records.jsonl", i=range(4)),
+        expand(
+            "results/stress_sun/{run}/records.jsonl",
+            run=["anchor", "stress1", "stress2", "stress3", "stress3_photo"],
+        ),
+    params:
+        config_used=config_values("suns", "stress_suns", "ctx_map_sun"),
+    output:
+        "results/reports/sun_degradation.md",
+    shell:
+        "fidelis-degradation --config config/jezero.yaml --out {output}"

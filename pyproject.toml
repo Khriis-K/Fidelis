@@ -32,6 +32,7 @@ fidelis-plain-mc = "fidelis.plain_mc:main"
 fidelis-match-viz = "fidelis.nav.match_viz:main"
 fidelis-splat-views = "fidelis.splat.views:main"
 fidelis-splat-train = "fidelis.splat.train:main"
+fidelis-degradation = "fidelis.degradation:main"
 
 [dependency-groups]
 dev = [
