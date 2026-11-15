@@ -317,6 +317,54 @@ def test_the_renderer_gets_the_scenarios_sun_seed_and_true_camera(simulator):
     np.testing.assert_allclose(pose.position, expected.position)
 
 
+class LocateSpy:
+    """The real navigator, noting the camera each `locate` was told it has."""
+
+    def __init__(self, navigator):
+        self.inner, self.cameras = navigator, []
+
+    def __getattr__(self, name):
+        return getattr(self.inner, name)
+
+    def locate(self, image, intrinsics, attitude=None):
+        self.cameras.append(intrinsics)
+        return self.inner.locate(image, intrinsics, attitude)
+
+
+def test_the_renderer_gets_the_true_camera_and_the_navigator_the_miscalibrated_one(simulator):
+    rendered = []
+
+    def spy(pose, intrinsics, sun_index, seed):
+        rendered.append(intrinsics)
+        return render_flat(pose, intrinsics, sun_index, seed)
+
+    navigator = LocateSpy(simulator.navigator)
+    Simulator({"spy": spy}, navigator, K).run(scenario(focal_error=0.004), "spy")
+    assert rendered == [K]
+    assert navigator.cameras == [K.with_focal_error(0.004)]
+
+
+def test_a_focal_error_lifts_a_nadir_fix_by_that_fraction_of_the_altitude(simulator):
+    # Flat ground seen square on: a focal length e too long reads as a camera e * h farther away.
+    exact = simulator.run(scenario(), "flat").record
+    wrong = simulator.run(scenario(focal_error=0.05), "flat").record
+    lift = np.subtract(wrong.error_vector, exact.error_vector)
+    np.testing.assert_allclose(lift, [0.0, 0.0, 0.05 * 192.0], atol=MAP_PIXEL_M / 2)
+    assert wrong.scenario["focal_error"] == 0.05
+
+
+def test_off_nadir_a_focal_error_moves_the_fix_back_from_the_tilt_through_the_whole_navigator(simulator):
+    # The geometry of tests/nav/test_pnp.py, now through the warp to nadir (made with the believed
+    # camera), matching and RANSAC: about e * h * sin(2 tilt) horizontally, away from the tilt.
+    tilted = dict(tilt_deg=10.0, tilt_azimuth_deg=60.0)
+    exact = simulator.run(scenario(**tilted), "flat").record
+    wrong = simulator.run(scenario(**tilted, focal_error=0.05), "flat").record
+    shift = np.subtract(wrong.error_vector, exact.error_vector)[:2]
+    a = math.radians(60.0)
+    along = shift @ [math.sin(a), math.cos(a)]
+    assert along == pytest.approx(-0.05 * 192.0 * math.sin(math.radians(20.0)), abs=MAP_PIXEL_M / 2)
+
+
 def test_the_scene_config_has_a_sun_for_every_sun_index_the_sampler_can_draw():
     import yaml
 

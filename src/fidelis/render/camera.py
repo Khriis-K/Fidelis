@@ -15,7 +15,7 @@ See docs/camera-conventions.md.
 """
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -72,6 +72,12 @@ class Intrinsics:
         """Square pixels, principal point on the image centre."""
         f = width / (2 * math.tan(math.radians(fov_x_deg) / 2))
         return cls(width, height, f, f, (width - 1) / 2, (height - 1) / 2)
+
+    def with_focal_error(self, fraction: float) -> "Intrinsics":
+        """This camera as a navigator with a miscalibrated focal length believes it: fx and fy
+        scaled by 1 + fraction, the principal point unchanged (#38)."""
+        scale = 1 + fraction
+        return replace(self, fx=self.fx * scale, fy=self.fy * scale)
 
     def matrix(self) -> np.ndarray:
         return np.array([[self.fx, 0, self.cx], [0, self.fy, self.cy], [0, 0, 1]], dtype=np.float64)

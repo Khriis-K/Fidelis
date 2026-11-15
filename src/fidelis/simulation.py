@@ -173,7 +173,8 @@ class Simulator:
         radiance = renderer(pose, self.intrinsics, scenario.sun_index, scenario.seed)
         haze = scenario_transmittance(scenario, pose, self.intrinsics, self.dust_scale_height_m)
         image = camera_image(radiance, scenario, haze)
-        nav = navigator.locate(image, self.intrinsics, pose.rotation)
+        # The navigator's camera model: the true one, its focal length miscalibrated by the scenario's error (#38).
+        nav = navigator.locate(image, self.intrinsics.with_focal_error(scenario.focal_error), pose.rotation)
         cost = time.perf_counter() - start
 
         estimate = error = in_map = None

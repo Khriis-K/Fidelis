@@ -21,6 +21,7 @@ from fidelis.scenario import (
     check_fits_tile,
     clear_air,
     draw,
+    exact_camera,
     load_config,
     max_ground_reach_m,
     parse_distribution,
@@ -45,6 +46,7 @@ def make_config(**overrides) -> ScenarioConfig:
         "exposure_gain": TruncatedNormal(mean=1.0, sd=0.1, low=0.7, high=1.3),
         "sun_index": Integers(0, 4),
         "dust_tau": Uniform(0.0, 1.5),
+        "focal_error": Uniform(-0.02, 0.02),
     }
     dists.update(overrides)
     return ScenarioConfig(**dists)
@@ -380,6 +382,28 @@ def test_pinning_the_sun_leaves_every_other_input_of_a_seed_unchanged():
 def test_a_sun_the_config_cannot_draw_is_refused(sun_index):
     with pytest.raises(ValueError, match="sun"):
         pin_sun(CONFIG, sun_index)
+
+
+def test_exact_camera_draws_no_focal_error_and_leaves_every_other_input_unchanged():
+    config = make_config(focal_error=Uniform(-0.01, 0.01))
+    for seed in range(20):
+        wrong, exact = draw(config, seed), draw(exact_camera(config), seed)
+        assert wrong.focal_error != 0 and exact.focal_error == 0.0
+        for name in FIELDS:
+            if name != "focal_error":
+                assert getattr(wrong, name) == getattr(exact, name), name
+
+
+def test_a_scenario_without_focal_error_has_an_exact_camera():
+    # Records from before #38 carry no focal_error; their navigator knew the camera exactly.
+    values = {name: 1.0 for name in FIELDS if name != "focal_error"} | {"seed": 0, "sun_index": 0}
+    assert Scenario(**values).focal_error == 0.0
+
+
+def test_the_jezero_focal_error_stays_within_the_pre_calibration_bound():
+    # +-1% is the only sourced figure (Johnson et al. 2017); the post-calibration one isn't found.
+    low, high = load_config(REPO / "config" / "jezero.yaml").focal_error.bounds()
+    assert -0.01 <= low < 0 < high <= 0.01
 
 
 def test_monte_carlo_seeds_and_splat_view_seeds_meet_at_one_limit():

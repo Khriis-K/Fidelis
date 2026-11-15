@@ -1,4 +1,7 @@
+from pathlib import Path
+
 import numpy as np
+import pytest
 
 from fidelis.nav.match_viz import INLIER_BGR, KEYPOINT_BGR, OUTLIER_BGR, draw_matches
 
@@ -57,3 +60,37 @@ def test_a_run_with_no_matches_still_gets_a_picture():
     canvas = draw_matches(DESCENT, MAP, empty, empty, no_inliers, caption="seed 3: no_solution")
     assert canvas.shape[:2] == (200, 550)
     assert (canvas != draw_matches(DESCENT, MAP, empty, empty, no_inliers)).any()  # the caption was drawn
+
+
+class StopBeforeRunning(Exception):
+    pass
+
+
+@pytest.mark.parametrize(
+    ("flags", "zeroed"),
+    [
+        ([], set()),
+        (["--clear-air"], {"dust_tau"}),
+        (["--exact-camera"], {"focal_error"}),
+    ],
+)
+def test_the_cli_pictures_the_descent_with_exactly_the_errors_its_flags_leave_out(monkeypatch, tmp_path, flags, zeroed):
+    # The picture must show the run it reproduces; those from before #37 and #38 had no haze and the exact camera.
+    import fidelis.nav.match_viz as match_viz
+    import fidelis.simulation
+
+    seen = []
+
+    class Simulator:
+        def run(self, scenario, fidelity):
+            seen.append(scenario)
+            raise StopBeforeRunning
+
+    monkeypatch.setattr(fidelis.simulation, "build_simulator", lambda *args, **kwargs: Simulator())
+    config_path = str(Path(__file__).resolve().parents[2] / "config" / "jezero.yaml")
+    monkeypatch.setattr("sys.argv", ["fidelis-match-viz", config_path, "data", "7", str(tmp_path / "m.png"), *flags])
+    with pytest.raises(StopBeforeRunning):
+        match_viz.main()
+    [scenario] = seen
+    for name in ("dust_tau", "focal_error"):
+        assert (getattr(scenario, name) == 0.0) == (name in zeroed), name

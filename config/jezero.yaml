@@ -193,6 +193,14 @@ scenario:
   # every run drawing it is hazy, so a P(fail) bound from it holds for tau 0.5-1 only
   # (docs/benchmarks/dust-haze.md). Reruns of results from before #37 pass --clear-air.
   dust_tau: {dist: uniform, low: 0.5, high: 1.0}
+  # The navigator's focal-length error, as a fraction (#38): it solves with the true focal length
+  # times 1 + focal_error; the render uses the true one. +-1% is LCAM's pre-calibration bound, the
+  # largest term in the 2017 error budget (Johnson et al. 2017 p.11, Table 2;
+  # docs/research/lvs-error-sources.md). The post-calibration uncertainty isn't found, so this is
+  # a labelled range, not the flight camera's error. JPL drew it Gaussian within +-1%; uniform
+  # (a Fidelis choice) covers the range evenly so results can be read per range point
+  # (docs/benchmarks/focal-error.md). Reruns of results from before #38 pass --exact-camera.
+  focal_error: {dist: uniform, low: -0.01, high: 0.01}
 
 # Dust haze (#37, src/fidelis/render/haze.py): how the column's dust (scenario.dust_tau) is
 # spread with height. The share below a camera h up is 1 - exp(-h / H).

@@ -1,3 +1,5 @@
+import math
+
 import cv2
 import numpy as np
 import pytest
@@ -81,3 +83,52 @@ def test_mismatched_point_counts_are_a_caller_error():
     image, world = terrain_points(50)
     with pytest.raises(ValueError, match="same number"):
         solve_pose(image[:-1], world, K)
+
+
+# --- a miscalibrated focal length (#38): rendered with K, solved with K's focal length off by e
+
+ALTITUDE = 2300.0
+
+
+def flat_ground_view(tilt_deg, azimuth_deg):
+    """A camera ALTITUDE above flat ground (z = 0), leaning tilt_deg off nadir towards the
+    compass bearing azimuth_deg, with a grid over its whole image and the ground points it sees."""
+    t, a = math.radians(tilt_deg), math.radians(azimuth_deg)
+    eye = np.array([0.0, 0.0, ALTITUDE])
+    axis = np.array([math.sin(t) * math.sin(a), math.sin(t) * math.cos(a), -math.cos(t)])
+    pose = look_at(eye, eye + axis, up=[0.3, 1.0, 0.0])
+    u, v = np.meshgrid(np.linspace(0, 1023, 40), np.linspace(0, 1023, 40))
+    pixels = np.column_stack([u.ravel(), v.ravel()])
+    rays = np.column_stack([pixels, np.ones(len(pixels))]) @ np.linalg.inv(K.matrix()).T @ pose.rotation.T
+    world = eye + (-ALTITUDE / rays[:, 2])[:, None] * rays
+    return pose, pixels, world
+
+
+def test_at_nadir_a_focal_error_puts_the_camera_that_fraction_higher_and_nowhere_else():
+    # Over flat ground, seen square on, a longer focal length looks exactly like a camera
+    # farther away: the solve is off by e * h straight up, exactly, not just to first order.
+    pose, pixels, world = flat_ground_view(0.0, 0.0)
+    shift = solve_pose(pixels, world, K.with_focal_error(0.01)).pose.position - pose.position
+
+    np.testing.assert_allclose(shift, [0.0, 0.0, 0.01 * ALTITUDE], atol=1e-3)
+
+
+@pytest.mark.parametrize("focal_error", [0.01, -0.01])
+@pytest.mark.parametrize("azimuth_deg", [0.0, 135.0])
+@pytest.mark.parametrize("tilt_deg", [6.0, 12.0, 18.0])
+def test_off_nadir_a_focal_error_moves_the_fix_e_h_sin_2tilt_away_from_the_tilt(tilt_deg, azimuth_deg, focal_error):
+    # First order in e, in the vertical plane of the tilt: fitting ground points x = h tan(tilt + phi)
+    # with every ray's angle shrunk by tan(phi') = tan(phi) / (1 + e) is solved exactly by moving the
+    # camera e h sin(2 tilt) back from the tilt (and e h cos(2 tilt) up). The rest of the image, out
+    # of that plane, bends it by under 2% at 18 deg. This is the off-nadir term JPL found: +-1% gave
+    # up to 16.9 m horizontally (Johnson et al. 2017, docs/research/lvs-error-sources.md).
+    pose, pixels, world = flat_ground_view(tilt_deg, azimuth_deg)
+    shift = solve_pose(pixels, world, K.with_focal_error(focal_error)).pose.position - pose.position
+
+    a = math.radians(azimuth_deg)
+    towards_tilt = np.array([math.sin(a), math.cos(a)])
+    along = shift[:2] @ towards_tilt
+    expected = -focal_error * ALTITUDE * math.sin(math.radians(2 * tilt_deg))
+    assert along == pytest.approx(expected, rel=0.03)
+    across = shift[:2] - along * towards_tilt
+    assert np.linalg.norm(across) < 0.02 * abs(expected)

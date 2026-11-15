@@ -80,3 +80,17 @@ def test_intrinsics_from_field_of_view_centre_the_principal_point_on_the_image()
     assert k.fy == pytest.approx(512.0)
     assert (k.cx, k.cy) == pytest.approx((511.5, 511.5))
     np.testing.assert_allclose(k.matrix(), [[512, 0, 511.5], [0, 512, 511.5], [0, 0, 1]])
+
+
+def test_a_focal_error_scales_both_focal_lengths_and_keeps_the_principal_point():
+    # The navigator's believed camera (#38): only the focal length is miscalibrated.
+    k = Intrinsics.from_fov(width=1024, height=1024, fov_x_deg=90.0)
+    believed = k.with_focal_error(0.01)
+
+    assert (believed.fx, believed.fy) == pytest.approx((512.0 * 1.01, 512.0 * 1.01))
+    assert (believed.cx, believed.cy, believed.width, believed.height) == (k.cx, k.cy, k.width, k.height)
+
+
+def test_no_focal_error_is_the_same_camera():
+    k = Intrinsics.from_fov(width=1024, height=1024, fov_x_deg=90.0)
+    assert k.with_focal_error(0.0) == k

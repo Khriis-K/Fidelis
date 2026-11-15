@@ -24,6 +24,15 @@ def test_the_rules_that_made_the_results_from_before_haze_still_run_in_clear_air
     assert all("--clear-air" in command for command in commands), commands
 
 
+def test_the_rules_that_made_the_results_from_before_the_focal_error_still_use_the_exact_camera():
+    # Their navigator knew the camera exactly (#38); a rerun with a focal error would change what they mean.
+    output = dry_run("local", *TARGETS, "--printshellcmds")
+    commands = [line for line in output.splitlines() if "fidelis-plain-mc" in line or "fidelis-match-viz" in line]
+
+    assert len(commands) == 2
+    assert all("--exact-camera" in command for command in commands), commands
+
+
 def test_carc_pins_the_gpu_model_for_both_since_their_costs_are_recorded():
     jobs = planned_jobs(dry_run("carc", *TARGETS))
 

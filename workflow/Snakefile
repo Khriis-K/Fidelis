@@ -34,15 +34,18 @@ MAP_RESOLUTIONS = {
 # What fidelis-plain-mc and fidelis-match-viz read: the sampler, the simulator, the run.
 # Not map_offset or matching_map.source: the Monte Carlo rules below are pinned to the scene's
 # own map (OLD_MAP), whose offset is zero by construction.
-# Not scenario.dust_tau or haze either: those rules run in clear air (below).
+# Not scenario.dust_tau or haze either: those rules run in clear air (below). Nor
+# scenario.focal_error: they run with the exact camera (below).
 MC_CONFIG = config_values("plain_mc", "scenario", "simulation", "suns", "tile", "scene")
-MC_CONFIG["scenario"] = {key: value for key, value in MC_CONFIG["scenario"].items() if key != "dust_tau"}
+MC_CONFIG["scenario"] = {
+    key: value for key, value in MC_CONFIG["scenario"].items() if key not in ("dust_tau", "focal_error")
+}
 # The plain_mc* and match_viz rules made the results from before #36, on seeds 0-19, against
-# the scene's own map and in clear air (no dust haze, #37). They stay that way: on the CTX map,
-# or with haze, they would overwrite those results, and the CTX map would spend seeds its scans
-# must not have seen. Scans on the CTX map are pre-registered and run by hand
-# (docs/benchmarks/ctx-map-scan.md).
-OLD_MAP = "--matching-map scene --clear-air"
+# the scene's own map, in clear air (no dust haze, #37) and with the exact camera (no focal-length
+# error, #38). They stay that way: on the CTX map, with haze or with a focal error, they would
+# overwrite those results, and the CTX map would spend seeds its scans must not have seen. Scans
+# on the CTX map are pre-registered and run by hand (docs/benchmarks/ctx-map-scan.md).
+OLD_MAP = "--matching-map scene --clear-air --exact-camera"
 
 
 JEZERO = "data/jezero"

@@ -254,3 +254,41 @@ def test_written_records_read_back_unchanged(tmp_path):
     assert read_records(path) == records
     assert len(path.read_text().splitlines()) == 3  # one line per sample
     assert [p.name for p in path.parent.iterdir()] == ["records.jsonl"]  # no temp file left behind
+
+
+# --- the rerun flags: the real CLI and config, with the GPU simulator stood in for
+
+
+class StopBeforeRunning(Exception):
+    pass
+
+
+@pytest.mark.parametrize(
+    ("flags", "zeroed"),
+    [
+        ([], set()),
+        (["--clear-air"], {"dust_tau"}),
+        (["--exact-camera"], {"focal_error"}),
+        (["--clear-air", "--exact-camera"], {"dust_tau", "focal_error"}),
+    ],
+)
+def test_the_cli_runs_the_config_with_exactly_the_errors_its_flags_leave_out(monkeypatch, tmp_path, flags, zeroed):
+    # Reruns of results from before #37 and #38 rely on these flags reaching the draws.
+    import fidelis.plain_mc as plain_mc
+    import fidelis.simulation
+
+    seen = []
+    monkeypatch.setattr(fidelis.simulation, "build_simulator", lambda *args, **kwargs: None)
+
+    def capture(simulator, config, seeds, fidelity):
+        seen.append(config)
+        raise StopBeforeRunning
+
+    monkeypatch.setattr(plain_mc, "run_samples", capture)
+    config_path = str(REPO / "config" / "jezero.yaml")
+    monkeypatch.setattr("sys.argv", ["fidelis-plain-mc", config_path, "data", str(tmp_path), *flags])
+    with pytest.raises(StopBeforeRunning):
+        plain_mc.main()
+    [config] = seen
+    for name in ("dust_tau", "focal_error"):
+        assert (getattr(config, name).bounds() == (0.0, 0.0)) == (name in zeroed), name

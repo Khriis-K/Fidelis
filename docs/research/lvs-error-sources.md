@@ -15,7 +15,7 @@ Ranked by how likely each is to produce realistic failures (the ranking is **[In
 1. **Map and descent image that don't look alike.** This is the only documented cause of LVS field-test misses. All 6–7 runs outside 40 m had a sun-angle difference between map and image above 100°. Fidelis has *no* mismatch today, because its map is a block average of the same orthoimage it renders from.
 2. **Dust haze lowering contrast.** LVS stopped matching below about 4 DN of scene contrast. Pre-launch tests varied dust optical depth τ from 0.5 to 1. Fidelis renders no haze at all.
 3. **Map distortion (local warping of the orbital map).** Pre-landing simulations found this the *largest* contributor to LVS position error. The requirement allowed up to 18 m (99%), which is bigger than Fidelis' 12 m failure line on its own. Not modelled.
-4. **Camera calibration (focal length).** A ±1% focal-length error gave up to 16.9 m (99%) of error in the 2017 error budget, the largest single term at the time. It also exceeds 12 m alone. Not modelled. A post-calibration value wasn't found.
+4. **Camera calibration (focal length).** A ±1% focal-length error gave up to 16.9 m (99%) of error in the 2017 error budget, the largest single term at the time. It also exceeds 12 m alone. Modelled since #38 as a labelled range up to ±1% (`docs/benchmarks/focal-error.md`). A post-calibration value wasn't found.
 5. **Attitude knowledge (IMU) error.** Small: under 0.5° per axis at LVS start, and LVS tolerated 5°. Fidelis already measured little effect up to 3° (`docs/benchmarks/navigator.md`). Low priority for failures.
 6. **Altitude and timing errors.** Small and well tolerated (altitude ±350 m tested fine; time sync worth ~1.8 m). Lowest priority.
 
