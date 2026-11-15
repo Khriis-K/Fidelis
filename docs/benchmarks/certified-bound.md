@@ -6,7 +6,7 @@ ADR 0004 decision 1 and ADR 0005 decision 6. One plain Monte Carlo run on the fu
 
 ## Plan
 
-**Status: written 2026-11-15, before any of these seeds ran.** Nothing in this section is a measurement, except numbers marked **[Computed]** from existing records.
+**Status: written 2026-11-15, before any of these seeds ran (committed at `4d31985`); the results are under it.** Nothing in this section is a measurement, except numbers marked **[Computed]** from existing records.
 
 ### Step 0: none needed, the cost is already measured
 
@@ -76,4 +76,76 @@ The only source on our own conditions is the combined scan (300 descents, seeds 
 
 ## Results
 
-Not run yet.
+**Run on 2026-11-15.** SLURM jobs 14267261–14267264, debug partition, all on node b11-09, one NVIDIA A40 each, one after another as planned. All `COMPLETED`, in 21 min 10 s to 21 min 24 s each (`sacct`), 85 minutes in all: about **2,040 SUs** at 24 a minute **[Computed]**, against the plan's 2,050. **No departures from the plan.**
+
+The numbers below come from the records with a throwaway analysis script (not committed), using `fidelis.plain_mc.read_records`, `is_failure`, `wilson_interval` and `fidelis.map_frame.horizontal_error_m`. "Error" is the map-frame horizontal error.
+
+### 1. Checks
+
+All passed: 10,000 records, seeds 80,000–89,999 each exactly once, every record on an NVIDIA A40, every one with config SHA-256 `0e7ccb36…`, the realistic sun list, `stress_case` false in every batch.
+
+### 2. The headline
+
+**1 failure in 10,000 at r = 40 m: 1 no-fix, 0 beyond r.** P(fail) = 0.01%, with a **95% Wilson upper bound of 0.057%** and an exact one-sided Clopper–Pearson bound of 0.047% **[Computed]**. The rule of three applies to 0 failures only, so it isn't quoted. Every fixed descent was under 40 m by a wide margin; the worst was 22.62 m.
+
+This is the rate **under the sourced ranges**, and the one failure comes from a part of those ranges that sits outside what the sources tested (section 4). It is not the flight rate.
+
+### 3. The reference for #21
+
+Over the 9,999 descents that got a fix: **mean 5.807 m, standard error 0.032 m** (sd 3.227 m), median 5.325 m, 99th percentile 15.44 m, max 22.62 m (seed 84415). The records stay at `results/certified_bound/batch{0..3}/records.jsonl` on `/project2` and on the laptop. None are to be reused as pilot samples.
+
+| Sun | Az, el | Descents | Failures | Median | 99th pct | Max |
+|---|---|---|---|---|---|---|
+| 0 | 257°, 40° | 2,024 | 0 | 4.94 m | 14.64 m | 18.76 m |
+| 1 | 240°, 25° | 1,998 | 0 | 6.84 m | 16.20 m | 20.80 m |
+| 2 | 240°, 55° | 2,032 | 0 | 4.18 m | 13.85 m | 22.62 m |
+| 3 | 310°, 25° | 1,941 | 0 | 6.35 m | 16.37 m | 19.56 m |
+| 4 | 310°, 55° | 2,005 | 1 | 3.77 m | 14.19 m | 19.25 m |
+
+### 4. The one failure: an overexposed image
+
+**Seed 85247**, sun 4 (310°, 55°), exposure gain 1.494 (the 99.4th percentile of the draws, near the 1.5 top), tilt 17.2°, τ 0.75, focal error −0.17%. It matched 1 point and kept 0 inliers (status `too_few_matches`). The next-lowest of the 10,000 kept 329, so this is a cliff, not the edge of a slope.
+
+**The low tail is an exposure tail.** Of the 10 descents with the fewest inliers, 9 drew a gain of 1.42 or more, all 9 under a high sun (2 or 4, 55°). The worst error, 22.62 m (seed 84415), drew a gain of 1.496 under sun 2. Over all 10,000, gain barely ranks with inliers (Spearman −0.07). It matters only at the top of its range.
+
+**Re-rendering the seed on the laptop, changing only the gain** (the thinned map `mesh-k8000`, because the full map doesn't fit the laptop's GPU; the image is the same render) **[Computed]**:
+
+| Gain | Mean brightness | Pixels clipped | Result (thinned map) |
+|---|---|---|---|
+| 1.494, as drawn | 248 DN | 65% | No fix, 0 inliers (as on the A40) |
+| 1.25 | 221 DN | 11% | Fix, 135 inliers |
+| 1.0 | 178 DN | 0% | Fix, 142 inliers |
+| 0.6 | 107 DN | 0% | Fix, 143 inliers |
+
+So the image saturated, and two thirds of it was pure white. The haze lifts every pixel towards the brightest ground before exposure, and a 55° sun leaves little shading, so the histogram sits high and narrow. Our exposure model puts the 99.9th-percentile pixel at gain × full scale (`fidelis.render.degrade.expose`), so above a gain of 1 the bulk of a narrow histogram clips.
+
+**Where this sits on the source's axis.** The sources set exposure against the **mean** brightness: a 100 DN target, a flight mean of about 60 DN, and LVS tested from 128 DN down to 16 DN, which is where "off by 4× either way" comes from (Johnson et al. 2017 p.14, Johnson et al. 2022 p.15; `docs/research/edl-dispersions-for-scenario-sampler.md`). Nothing brighter than 128 DN was tested. This image's mean was 248 DN, about twice the brightest tested and about 4 times the flight mean. Saturation is a failure the sources do report: 3 of the 20 coarse retries in JPL's Monte Carlo (Johnson et al. 2020 Table 5, `lvs-error-sources.md`). So the mechanism is a real one, and the draw that triggered it lies outside the sourced envelope.
+
+**What that says about the exposure range** (one seed, so a lead, not a measurement). On this seed our gain of 0.6 gives 107 DN, about the source's 100 DN target, and our gain of 1.0 already gives 178 DN. If that holds across scenes, the config's range of 0.5–1.5 runs from about the flight target up to about 2.5 times it, not "centred near the flight value" as the config comment says. That needs the mean brightness measured over many seeds before anything changes. Nothing is re-tuned here, and the failure stays in the count.
+
+### 5. Exploratory
+
+- **At 12 m:** 483 of 9,999 fixed descents.
+- **Cost:** median 0.4989–0.5022 s per descent across the four batches; 99th percentile 0.535–0.541 s; max 0.608 s. All on b11-09.
+
+## Against the prediction
+
+| Prediction (before the run) | Result | Held? |
+|---|---|---|
+| 0 failures of 10,000 | 1 (a lost fix) | **No.** A surprise, as the plan defined it |
+| Surprise line: any lost fix | Seed 85247, an overexposed image | Crossed |
+| Mean inside 5.31–6.04 m | 5.807 m | Yes |
+| Standard error near 0.03 m | 0.032 m | Yes |
+| Median about 5.3 m, 99th percentile about 16 m | 5.33 m, 15.44 m | Yes |
+| Worst error 20–30 m **[Inference]** | 22.62 m | Yes |
+| 260–730 over 12 m | 483 | Yes |
+| Batch median cost 0.50–0.52 s | 0.4989–0.5022 s | Three batches a hair under the range; the 0.48–0.55 s surprise line held |
+
+**Why the prediction missed.** It rested on the combined scan's 300 seeds, where the fewest inliers was 698. A lost fix at the corner of three draws (gain above about 1.4, a high sun, and enough haze to narrow the histogram) showed up once in 10,000, too rare for 300 descents to be likely to show it. The plan's own "more failures" branch named this: "the 300 were too few to see it". The bulk of the distribution matched the prediction everywhere.
+
+## What this means
+
+- **The certified number is P(fail at 40 m) under 0.057% at 95% confidence**, under the sourced ranges. That's still about 17 times under JPL's rough 1%, with the same caveat as before: LVS had about 10 s and several images, and Fidelis judges one.
+- **The one failure is the model's exposure range, not the navigator's matching or geometry.** It comes from an image twice as bright as anything LVS was tested on. A flight-like exposure on the same seed works. So the bound is, if anything, pessimistic about exposure, as long as the gain anchor question in section 4 is open.
+- **Not settled:** how the model's gain maps to mean DN across scenes. If it really runs to about 2.5 times the flight target, re-anchoring the exposure to mean brightness would remove draws like this one. Removing them would need a fresh pre-registered run, never an edit to this count.
+- **For #21:** the reference mean is 5.807 m ± 0.032 m (one standard error) over 9,999 fixed descents.
