@@ -1,6 +1,6 @@
 # Attitude-knowledge error (#39): the model and a laptop smoke test
 
-**Status:** built and smoke-tested on the laptop; prediction written 2026-11-14, before the build. The attitude error is scanned once, together with sourced errors 2 and 3, in the combined scan (`combined-scan.md`, ADR 0005 decision 4). Nothing here is a result.
+**Status:** built and smoke-tested on the laptop; prediction written 2026-11-14, before the build. Scanned together with sourced errors 2 and 3: results, and how the prediction held, in `combined-scan.md` (ADR 0005 decision 4). Nothing in this file is a result.
 
 ## What changes
 

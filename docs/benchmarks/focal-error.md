@@ -1,6 +1,6 @@
 # Focal-length calibration error (#38): the model and a laptop smoke test
 
-**Status:** built, not scanned. The focal error is scanned once, together with sourced errors 2 and 4, in #39 (ADR 0005, decision 4). Nothing here is a result.
+**Status:** built, and scanned together with sourced errors 2 and 4 in #39: results in `combined-scan.md` (ADR 0005, decision 4). Nothing in this file is a result.
 
 ## The model
 

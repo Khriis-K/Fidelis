@@ -6,7 +6,7 @@ The one pre-registered scan of dust haze (#37), focal-length error (#38) and att
 
 ## Plan
 
-**Status: pre-registered 2026-11-14, before any descent was run with all three errors.** Nothing in this section is a measurement.
+**Status: pre-registered 2026-11-14, before any descent was run with all three errors** (committed at `2a252e9`). Nothing in this section is a measurement; the results are under it.
 
 ### What runs
 
@@ -69,3 +69,106 @@ Each error's prediction is in its own write-up, made before its build. Put toget
 
 - **No descent has been run with all three errors on the full map.** Laptop smoke tests on a thinned map (`mesh-k8000`) checked each error's plumbing alone; they aren't results.
 - **The control is the #36 model, but not the #36 code.** Since then the failure line moved to horizontal error (#46) and three error paths were added, each with a test that zero error reproduces the old output. The control is where that shows on real renders.
+
+## Results
+
+**Run on 2026-11-14.** SLURM job 14258755, debug partition, node b11-09, one NVIDIA A40, all three runs in sequence in one `sbatch` job, as planned. `COMPLETED` in 8 min 3 s (`sacct`). At 24 SUs a minute that is about 193 SUs **[Computed]**, at the bottom of the plan's 190–240 estimate. Every record names the A40 and carries config SHA-256 `0e7ccb36…`, which matches the committed `config/jezero.yaml` at `2a252e9`. All 300 seeds (60,000–60,299) ran in every run, on the CTX map (58,866 keypoints), under the realistic suns and the photo texture. Median cost per descent: 0.503 s for the scan, 0.447 s for the control, 0.504 s with no attitude error. **No departures from the plan.**
+
+The numbers below come from the records with a throwaway analysis script (not committed), using `fidelis.plain_mc.read_records`, `fidelis.map_frame.horizontal_error_m` and `fidelis.simulation.believed_attitude`. "Error" is the map-frame horizontal error unless it says otherwise.
+
+### 1. The headline
+
+**0 failures in 300 at r = 40 m horizontal in the map frame: 0 no-fix, 0 beyond r. P(fail) = 0, 95% Wilson interval [0, 0.0126].** Offset removed: +1.89 m east, −1.49 m north. Every descent got a fix; the fewest inliers in any descent was 698. The worst was **17.45 m** (seed 60019: sun 1, 16.2° tilt, τ 0.96, focal error −0.77%), under half of r.
+
+This is the rate **under the sourced ranges**: haze over τ 0.5–1, focal error over the pre-calibration ±1%, attitude and misalignment errors uniform over their bounds. It is not the flight rate, and it isn't the certified bound, which comes from #47.
+
+### 2. The null case: the control is clean
+
+0 failures in 300 (0 no-fix, 0 beyond r). Error median 4.29 m, 90th percentile 7.59 m, worst 9.55 m. The CTX map scan, on other seeds, gave a median of 4.37 m horizontal and a worst of 10.02 m (`ctx-map-scan.md`). So on the zero-error path the code since #36 behaves as before, and the scan is trusted.
+
+### 3. By sun
+
+| Sun | Az, el | Descents | Failures | Scan median | Scan 90th pct | Scan max | Control median | Control max |
+|---|---|---|---|---|---|---|---|---|
+| 0 | 257°, 40° | 55 | 0 | 5.18 m | 8.88 m | 14.95 m | 3.43 m | 6.49 m |
+| 1 | 240°, 25° | 62 | 0 | 6.09 m | 9.37 m | 17.45 m | 6.55 m | 9.12 m |
+| 2 | 240°, 55° | 58 | 0 | 4.85 m | 11.72 m | 16.31 m | 3.02 m | 6.56 m |
+| 3 | 310°, 25° | 63 | 0 | 6.11 m | 11.17 m | 17.31 m | 6.68 m | 9.55 m |
+| 4 | 310°, 55° | 62 | 0 | 3.91 m | 9.62 m | 10.91 m | 2.34 m | 6.57 m |
+| All | | 300 | 0 | 5.34 m | 9.74 m | 17.45 m | 4.29 m | 9.55 m |
+
+The low suns (1 and 3) were the worst in the control. In the scan their medians barely move, and even fall a little, while the high suns' medians rise by 1.6–1.8 m. The focal shift adds to whatever error a seed already has, and its direction is set by the tilt (`focal-error.md`), so it can cancel a low sun's steady offset as well as add to it.
+
+### 4. Per seed, scan against control
+
+The error grew in 189 of 300 seeds. Change: mean +1.23 m, median +0.55 m, 10th–90th percentile −2.04 to +5.40 m, range −5.96 to +13.24 m. Inliers moved little: median ratio 0.993. The rank correlation between a seed's error in the two runs is 0.40, down from 0.71 between the two maps in #36: the focal shift reorders which descents are worst.
+
+### 5. Focal error, binned by |e|
+
+Along-tilt part of the scan-minus-control shift, against −e·h·sin 2θ. The residual is everything that isn't the focal geometry: haze, attitude and matching effects together.
+
+| abs(e) | Seeds | Scan median | Scan max | Predicted shift (median size) | Residual: median | 10th–90th pct | Median size |
+|---|---|---|---|---|---|---|---|
+| 0–0.25% | 64 | 4.00 m | 8.47 m | 0.71 m | +0.13 m | −0.93 to +0.81 m | 0.48 m |
+| 0.25–0.5% | 68 | 4.55 m | 11.47 m | 2.49 m | −0.05 m | −0.71 to +0.82 m | 0.36 m |
+| 0.5–0.75% | 72 | 5.66 m | 13.96 m | 4.18 m | +0.02 m | −0.82 to +0.88 m | 0.40 m |
+| 0.75–1% | 96 | 6.19 m | 17.45 m | 6.01 m | −0.04 m | −0.82 to +0.99 m | 0.44 m |
+
+- **The fix moves as the geometry says.** A straight-line fit of the along-tilt shift to −e·h·sin 2θ over all 300 has a slope of 1.002. The residual has a median of 0.00 m and a largest size of 2.39 m. The across-tilt shift is small too: median −0.12 m, range −4.31 to +3.53 m.
+- **The residual doesn't grow with |e|**: its median size is 0.36–0.48 m in every bin. So there's no sign that the matcher reacts to the wrong camera: the focal error costs its geometry and nothing measurable on top.
+- **The error grows with |e|**, as it should: median 4.00 m in the lowest bin, 6.19 m in the highest, and every error over 11.5 m sits in the top two bins.
+- The 0.75–1% bin holds 96 seeds, not about 75. The edges are 0.25% wide and the draws are uniform, so this is draw scatter (a χ² test wasn't run).
+
+### 6. Haze, binned by τ
+
+| τ | Seeds | Inliers, scan / control (median) | Lowest ratio | Inliers, no-attitude / control (median) | Scan median | Scan max |
+|---|---|---|---|---|---|---|
+| 0.5–0.625 | 82 | 1.002 | 0.824 | 1.001 | 5.31 m | 16.31 m |
+| 0.625–0.75 | 78 | 0.996 | 0.605 | 1.000 | 5.29 m | 16.75 m |
+| 0.75–0.875 | 85 | 0.994 | 0.739 | 0.993 | 5.62 m | 17.31 m |
+| 0.875–1 | 55 | 0.977 | 0.820 | 0.982 | 4.63 m | 17.45 m |
+
+Inliers fall with τ, but only by about 2% at the top of the range (rank correlation between τ and the no-attitude/control inlier ratio: −0.16). No fix was lost, and the error doesn't rise with τ.
+
+### 7. Attitude, scan against no-attitude, seed for seed
+
+The total attitude rotation drawn had a median of 0.82° and a maximum of 1.77°.
+
+| Rotation | Seeds | Change in error: mean | Median size | Largest size | Horizontal vector change: median | Largest |
+|---|---|---|---|---|---|---|
+| 0–0.5° | 52 | +0.06 m | 0.32 m | 2.63 m | 0.55 m | 2.67 m |
+| 0.5–1° | 153 | +0.00 m | 0.32 m | 2.05 m | 0.57 m | 3.68 m |
+| 1–1.5° | 92 | −0.05 m | 0.32 m | 2.84 m | 0.60 m | 2.88 m |
+| Over 1.5° | 3 | +0.16 m | 0.36 m | 0.47 m | 0.37 m | 0.52 m |
+| All | 300 | −0.00 m | 0.32 m | 2.84 m | 0.56 m | 3.68 m |
+
+- **No bias.** The mean change is 0.00 m (10th–90th percentile −0.64 to +0.63 m).
+- **No trend with size.** The median change is 0.32–0.36 m in every bin. The largest vector change (3.68 m, seed 60126) came from a 0.60° rotation. That is matching scatter, not geometry, as the prediction said it would be.
+- **Inliers:** median ratio 0.998; per-seed changes from −276 to +117, on a median of about 1,330. The biggest swings left the error within about 1 m (seed 60230 lost 276 inliers, and its error went from 2.12 to 1.50 m).
+
+### 8. Exploratory (labelled as such)
+
+- **At 12 m:** 13 of 300 descents in the scan, 12 with no attitude error, 0 in the control.
+- **Vertical error:** the focal error lifts or drops the fix, as e·h·cos 2θ says (`focal-error.md`). Scan: median +2.65 m, range −22.76 to +23.61 m; control: median +0.29 m, range −2.68 to +3.38 m. Height doesn't count against r (#46), but the 3D error is now 13.64 m median against 5.34 m horizontal.
+- **Cost:** about 0.06 s more per descent with the errors on (0.503 against 0.447 s, medians), likeliest the haze's per-pixel work. Not profiled.
+
+## Against the prediction
+
+| Prediction (before the run) | Result | Held? |
+|---|---|---|
+| 0 of 300 at 40 m, no lost fixes in any run | 0 of 300 in all three runs, every descent fixed | Yes |
+| Control looks like the CTX map scan (median about 4.4 m, worst about 10 m) | Median 4.29 m, worst 9.55 m | Yes |
+| Focal residual within a few metres, no trend across the bins | Slope 1.002; residual median size 0.36–0.48 m in every bin, largest 2.39 m | Yes |
+| Worst error under about 25 m | 17.45 m | Yes |
+| Haze: inliers fall with τ, most near τ = 1; no lost fixes | Falls by about 2% at the top; no lost fixes | Yes, and smaller than expected |
+| Attitude: mean change near zero | 0.00 m | Yes |
+| Attitude: per-seed change under about 1.5 m **[Inference]** | Over 1.5 m in 12 of 300 seeds (4%); largest 2.84 m | **No**, as the smoke test already hinted |
+| Surprise line: an attitude change over about 3 m | Error change: largest 2.84 m. Horizontal vector change: one seed of 300 at 3.68 m | The error-change line held; the vector change crossed it once |
+
+**What the 1.5 m miss means.** The prediction got the mechanism right: no bias, and no trend with size. It got the scatter about twice too small. The **[Inference]** scaled the CPU fixture's 0.44 m by the pixel size, from 1.5 m to about 4.5 m. The real scatter has a 90th percentile of 0.90 m (error change) and a largest of 2.84 m, so the scaling under-called the tail. The fixture moved one axis at a time; here all three move at once. Either way it is under a tenth of r.
+
+## What this means
+
+The plan's "0 failures" branch applies. Under the sourced ranges, adding dust haze, a focal-length error and attitude errors on top of the real CTX map makes fixes less accurate and doesn't make the navigator fail. Almost all of the extra error is the focal error's geometry, predicted to within half a metre per seed; haze and attitude only add matching scatter. The worst of 300 is 17.45 m against a 40 m line. So P(fail) is under 1.26% at 95% confidence, under these ranges.
+
+That leaves the realistic model with no failures to estimate, as ADR 0004 anticipated. The 10,000-descent bound (#47) inherits these ranges, and the multifidelity estimators are demonstrated on mean error instead. The largest single error source is now a labelled range, the pre-calibration focal error. A sourced post-calibration figure would likely shrink these errors, not grow them **[Inference]**: calibration exists to make the error smaller than the pre-calibration bound.
