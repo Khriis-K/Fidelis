@@ -94,3 +94,27 @@ def test_the_cli_pictures_the_descent_with_exactly_the_errors_its_flags_leave_ou
     [scenario] = seen
     for name in ("dust_tau", "focal_error"):
         assert (getattr(scenario, name) == 0.0) == (name in zeroed), name
+
+
+@pytest.mark.parametrize("flags", [[], ["--true-attitude"]])
+def test_the_cli_pictures_the_descent_with_the_attitude_error_unless_told_not_to(monkeypatch, tmp_path, flags):
+    # The picture must show the run it reproduces; those from before #39 had the true attitude.
+    import fidelis.nav.match_viz as match_viz
+    import fidelis.simulation
+    from fidelis.scenario import ATTITUDE_FIELDS
+
+    seen = []
+
+    class Simulator:
+        def run(self, scenario, fidelity):
+            seen.append(scenario)
+            raise StopBeforeRunning
+
+    monkeypatch.setattr(fidelis.simulation, "build_simulator", lambda *args, **kwargs: Simulator())
+    config_path = str(Path(__file__).resolve().parents[2] / "config" / "jezero.yaml")
+    monkeypatch.setattr("sys.argv", ["fidelis-match-viz", config_path, "data", "7", str(tmp_path / "m.png"), *flags])
+    with pytest.raises(StopBeforeRunning):
+        match_viz.main()
+    [scenario] = seen
+    for name in ATTITUDE_FIELDS:
+        assert (getattr(scenario, name) == 0.0) == bool(flags), name

@@ -19,7 +19,7 @@ from fidelis.nav.navigator import Navigator
 from fidelis.nav.orbital_map import OrbitalMap
 from fidelis.render.camera import CameraPose, Intrinsics
 from fidelis.scenario import Scenario
-from fidelis.simulation import SimulationRecord, Simulator, scenario_pose
+from fidelis.simulation import SimulationRecord, Simulator, believed_attitude, scenario_pose
 from fidelis.terrain.fetch import sha256_of
 
 REPO = Path(__file__).resolve().parents[1]
@@ -363,6 +363,97 @@ def test_off_nadir_a_focal_error_moves_the_fix_back_from_the_tilt_through_the_wh
     a = math.radians(60.0)
     along = shift @ [math.sin(a), math.cos(a)]
     assert along == pytest.approx(-0.05 * 192.0 * math.sin(math.radians(20.0)), abs=MAP_PIXEL_M / 2)
+
+
+# --- attitude-knowledge error (#39): the navigator's belief, not the render
+
+SOURCED_BOUNDS = dict(  # every axis at its bound (Johnson et al. 2017; docs/benchmarks/attitude-error.md)
+    attitude_error_x_deg=0.5,
+    attitude_error_y_deg=-0.5,
+    attitude_error_z_deg=0.5,
+    misalignment_x_deg=0.75,
+    misalignment_y_deg=-0.75,
+    misalignment_z_deg=0.75,
+)
+
+
+class AttitudeSpy:
+    """The real navigator, noting the attitude each `locate` was told the camera has."""
+
+    def __init__(self, navigator):
+        self.inner, self.attitudes = navigator, []
+
+    def __getattr__(self, name):
+        return getattr(self.inner, name)
+
+    def locate(self, image, intrinsics, attitude=None):
+        self.attitudes.append(attitude)
+        return self.inner.locate(image, intrinsics, attitude)
+
+
+def angle_between_deg(a, b):
+    return math.degrees(math.acos(np.clip(np.dot(a, b) / np.linalg.norm(a) / np.linalg.norm(b), -1, 1)))
+
+
+def test_with_no_attitude_error_the_believed_attitude_is_the_true_one_exactly():
+    # Zero error must reproduce every run from before #39 bit for bit.
+    true = scenario_pose(scenario(tilt_deg=12.0, tilt_azimuth_deg=70.0, heading_deg=200.0), GROUND_Z).rotation
+    assert np.array_equal(believed_attitude(scenario(), true), true)
+
+
+@pytest.mark.parametrize("field", ["attitude_error_z_deg", "misalignment_z_deg"])
+def test_an_error_about_the_optical_axis_turns_the_image_but_not_where_the_camera_looks(field):
+    true = scenario_pose(scenario(tilt_deg=12.0, tilt_azimuth_deg=70.0), GROUND_Z).rotation
+    believed = believed_attitude(scenario(**{field: 3.0}), true)
+    assert angle_between_deg(believed[:, 2], true[:, 2]) == pytest.approx(0.0, abs=1e-6)
+    assert angle_between_deg(believed[:, 0], true[:, 0]) == pytest.approx(3.0, abs=1e-9)
+
+
+@pytest.mark.parametrize("field", ["attitude_error_x_deg", "misalignment_y_deg"])
+def test_an_error_about_a_cameras_image_axis_tilts_where_it_believes_it_looks(field):
+    true = scenario_pose(scenario(tilt_deg=5.0, tilt_azimuth_deg=200.0), GROUND_Z).rotation
+    believed = believed_attitude(scenario(**{field: 0.75}), true)
+    assert angle_between_deg(believed[:, 2], true[:, 2]) == pytest.approx(0.75, abs=1e-9)
+
+
+def test_the_two_errors_compose_about_the_same_axis_as_their_sum():
+    true = scenario_pose(scenario(), GROUND_Z).rotation
+    believed = believed_attitude(scenario(attitude_error_z_deg=0.5, misalignment_z_deg=-0.75), true)
+    signed = math.degrees(math.atan2(np.cross(true[:, 0], believed[:, 0]) @ true[:, 2], true[:, 0] @ believed[:, 0]))
+    assert signed == pytest.approx(-0.25, abs=1e-9)
+
+
+def test_the_renderer_gets_the_true_camera_and_the_navigator_the_believed_attitude(simulator):
+    rendered = []
+
+    def spy(pose, intrinsics, sun_index, seed):
+        rendered.append(pose.rotation)
+        return render_flat(pose, intrinsics, sun_index, seed)
+
+    navigator = AttitudeSpy(simulator.navigator)
+    wrong = scenario(**SOURCED_BOUNDS)
+    Simulator({"spy": spy}, navigator, K).run(wrong, "spy")
+    true = scenario_pose(wrong, GROUND_Z).rotation
+    np.testing.assert_array_equal(rendered[0], true)
+    np.testing.assert_allclose(navigator.attitudes[0], believed_attitude(wrong, true), atol=1e-15)
+    assert not np.allclose(navigator.attitudes[0], true)
+
+
+def test_a_run_with_zero_attitude_error_hands_the_navigator_the_true_attitude(simulator):
+    navigator = AttitudeSpy(simulator.navigator)
+    Simulator({"flat": render_flat}, navigator, K).run(scenario(), "flat")
+    np.testing.assert_array_equal(navigator.attitudes[0], scenario_pose(scenario(), GROUND_Z).rotation)
+
+
+def test_attitude_errors_at_their_sourced_bounds_keep_the_fix_within_a_map_pixel(simulator):
+    # PnP solves the whole pose, so the attitude only steers the warp before matching: it can cost
+    # matches but can't bias the geometry (attitude-error.md, "Prediction from the sources").
+    view = dict(tilt_deg=10.0, tilt_azimuth_deg=60.0, heading_deg=35.0)
+    exact = simulator.run(scenario(**view), "flat").record
+    wrong = simulator.run(scenario(**view, **SOURCED_BOUNDS), "flat").record
+    assert wrong.status == "ok"
+    assert np.linalg.norm(np.subtract(wrong.error_vector, exact.error_vector)) < MAP_PIXEL_M
+    assert {k: wrong.scenario[k] for k in SOURCED_BOUNDS} == SOURCED_BOUNDS
 
 
 def test_the_scene_config_has_a_sun_for_every_sun_index_the_sampler_can_draw():

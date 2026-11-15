@@ -3,7 +3,8 @@
 A scenario is one simulated descent's operating conditions: where the camera truly is
 (offset from the tile centre, altitude above the ground beneath it), how it's pointed
 (tilt off nadir, the direction of that tilt, heading), how the image is degraded
-(noise, motion blur, exposure, dust haze), and which pre-rendered sun angle lights it.
+(noise, motion blur, exposure, dust haze), which pre-rendered sun angle lights it, and
+what the navigator gets wrong about its camera (focal length, attitude).
 
 Every input has its own random stream, seeded by (seed, a hash of the input's name), so
 retuning one input's distribution leaves every other input of a seed unchanged. All
@@ -131,9 +132,19 @@ class Scenario:
     # The navigator's focal-length error, as a fraction: it solves with the true focal length times
     # 1 + focal_error (#38). 0 in records from before #38: the navigator knew the camera exactly.
     focal_error: float = 0.0
+    # The navigator's attitude error (#39), degrees about the camera's own axes (x right, y down,
+    # z the optical axis): the IMU's attitude at LVS start, then the LCAM-to-IMU misalignment.
+    # 0 in records from before #39: the navigator got the true attitude.
+    attitude_error_x_deg: float = 0.0
+    attitude_error_y_deg: float = 0.0
+    attitude_error_z_deg: float = 0.0
+    misalignment_x_deg: float = 0.0
+    misalignment_y_deg: float = 0.0
+    misalignment_z_deg: float = 0.0
 
 
 FIELDS = tuple(f.name for f in fields(Scenario) if f.name != "seed")
+ATTITUDE_FIELDS = tuple(f"{error}_{axis}_deg" for error in ("attitude_error", "misalignment") for axis in "xyz")
 
 
 @dataclass(frozen=True)
@@ -151,6 +162,12 @@ class ScenarioConfig:
     sun_index: Integers
     dust_tau: Distribution
     focal_error: Distribution
+    attitude_error_x_deg: Distribution
+    attitude_error_y_deg: Distribution
+    attitude_error_z_deg: Distribution
+    misalignment_x_deg: Distribution
+    misalignment_y_deg: Distribution
+    misalignment_z_deg: Distribution
 
     @classmethod
     def from_dict(cls, section: dict) -> "ScenarioConfig":
@@ -193,6 +210,11 @@ def clear_air(config: ScenarioConfig) -> ScenarioConfig:
 def exact_camera(config: ScenarioConfig) -> ScenarioConfig:
     """The same config with no focal-length error, as every run before #38 had. Other draws don't change."""
     return replace(config, focal_error=Uniform(0.0, 0.0))
+
+
+def true_attitude(config: ScenarioConfig) -> ScenarioConfig:
+    """The same config with no attitude error, as every run before #39 had. Other draws don't change."""
+    return replace(config, **{name: Uniform(0.0, 0.0) for name in ATTITUDE_FIELDS})
 
 
 def max_ground_reach_m(altitude_m: float, tilt_deg: float, fov_deg: float) -> float:

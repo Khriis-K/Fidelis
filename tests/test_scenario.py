@@ -11,6 +11,7 @@ import yaml
 from scipy import stats
 
 from fidelis.scenario import (
+    ATTITUDE_FIELDS,
     FIELDS,
     MC_SEED_LIMIT,
     Integers,
@@ -26,6 +27,7 @@ from fidelis.scenario import (
     max_ground_reach_m,
     parse_distribution,
     pin_sun,
+    true_attitude,
 )
 
 REPO = Path(__file__).resolve().parents[1]
@@ -47,6 +49,12 @@ def make_config(**overrides) -> ScenarioConfig:
         "sun_index": Integers(0, 4),
         "dust_tau": Uniform(0.0, 1.5),
         "focal_error": Uniform(-0.02, 0.02),
+        "attitude_error_x_deg": Uniform(-0.5, 0.5),
+        "attitude_error_y_deg": Uniform(-0.5, 0.5),
+        "attitude_error_z_deg": Uniform(-0.5, 0.5),
+        "misalignment_x_deg": Uniform(-0.75, 0.75),
+        "misalignment_y_deg": Uniform(-0.75, 0.75),
+        "misalignment_z_deg": Uniform(-0.75, 0.75),
     }
     dists.update(overrides)
     return ScenarioConfig(**dists)
@@ -404,6 +412,42 @@ def test_the_jezero_focal_error_stays_within_the_pre_calibration_bound():
     # +-1% is the only sourced figure (Johnson et al. 2017); the post-calibration one isn't found.
     low, high = load_config(REPO / "config" / "jezero.yaml").focal_error.bounds()
     assert -0.01 <= low < 0 < high <= 0.01
+
+
+def test_true_attitude_draws_no_attitude_error_and_leaves_every_other_input_unchanged():
+    config = make_config()
+    for seed in range(20):
+        wrong, true = draw(config, seed), draw(true_attitude(config), seed)
+        for name in FIELDS:
+            if name in ATTITUDE_FIELDS:
+                assert getattr(wrong, name) != 0 and getattr(true, name) == 0.0, name
+            else:
+                assert getattr(wrong, name) == getattr(true, name), name
+
+
+def test_the_attitude_inputs_are_the_six_axes_of_the_two_sourced_errors():
+    assert set(ATTITUDE_FIELDS) == {
+        f"{error}_{axis}_deg" for error in ("attitude_error", "misalignment") for axis in "xyz"
+    }
+    assert set(ATTITUDE_FIELDS) <= set(FIELDS)
+
+
+def test_a_scenario_without_attitude_error_has_the_true_attitude():
+    # Records from before #39 carry none of the six; their navigator got the true attitude.
+    values = {name: 1.0 for name in FIELDS if name not in ATTITUDE_FIELDS} | {"seed": 0, "sun_index": 0}
+    scenario = Scenario(**values)
+    assert all(getattr(scenario, name) == 0.0 for name in ATTITUDE_FIELDS)
+
+
+@pytest.mark.parametrize(("error", "bound_deg"), [("attitude_error", 0.5), ("misalignment", 0.75)])
+def test_the_jezero_attitude_errors_stay_within_their_sourced_bounds(error, bound_deg):
+    # Johnson et al. 2017: attitude at LVS start "less than 0.5 deg per axis"; LCAM-IMU misalignment
+    # within +-0.75 deg per axis. Uniform over the bound is the written choice (attitude-error.md).
+    config = load_config(REPO / "config" / "jezero.yaml")
+    for axis in "xyz":
+        dist = getattr(config, f"{error}_{axis}_deg")
+        assert isinstance(dist, Uniform)
+        assert dist.bounds() == (-bound_deg, bound_deg)
 
 
 def test_monte_carlo_seeds_and_splat_view_seeds_meet_at_one_limit():

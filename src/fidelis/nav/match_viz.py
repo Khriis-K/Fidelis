@@ -89,9 +89,14 @@ def main() -> int:
         action="store_true",
         help="no focal-length error (focal_error = 0), as every run before #38 had; for reruns of those results",
     )
+    parser.add_argument(
+        "--true-attitude",
+        action="store_true",
+        help="no attitude error (all six attitude inputs 0), as every run before #39 had; for reruns of those results",
+    )
     args = parser.parse_args()
 
-    from fidelis.scenario import clear_air, draw, exact_camera, load_config, pin_sun
+    from fidelis.scenario import clear_air, draw, exact_camera, load_config, pin_sun, true_attitude
     from fidelis.simulation import build_simulator
 
     config = load_config(args.config)
@@ -101,6 +106,8 @@ def main() -> int:
         config = clear_air(config)
     if args.exact_camera:
         config = exact_camera(config)
+    if args.true_attitude:
+        config = true_attitude(config)
     simulator = build_simulator(args.config, args.data_dir, (args.fidelity,), matching_map=args.matching_map)
     run = simulator.run(draw(config, args.seed), args.fidelity)
     record, nav = run.record, run.nav

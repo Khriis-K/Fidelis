@@ -24,8 +24,9 @@ real LVS map, CTX imagery with CTX elevation (#36), or the scene's own map, kept
 results reproduce. The true camera is placed above the scene's terrain either way: the
 truth can't depend on what the navigator's map believes the ground height is.
 
-The navigator gets the true attitude: attitude-knowledge (IMU) error isn't modelled
-(issue #34, docs/benchmarks/navigator.md).
+The navigator gets the attitude the spacecraft believes it has: the true one turned by the
+scenario's attitude and misalignment errors (#39, `believed_attitude`). It only steers the
+warp before matching, since PnP solves the whole pose (docs/benchmarks/attitude-error.md).
 """
 
 import math
@@ -78,6 +79,19 @@ def scenario_pose(scenario: Scenario, ground_z: float) -> CameraPose:
     axis = np.array([math.cos(a), -math.sin(a), 0.0])
     tilt = cv2.Rodrigues(axis * math.radians(scenario.tilt_deg))[0]
     return CameraPose(rotation=tilt @ nadir, position=position)
+
+
+def believed_attitude(scenario: Scenario, rotation: np.ndarray) -> np.ndarray:
+    """The camera-to-world rotation the navigator is told: the true `rotation` turned about the
+    camera's own axes by the scenario's attitude error, then its misalignment (#39).
+
+    Zero errors give back `rotation` exactly: the rotation of a zero vector is the identity.
+    """
+    turns = [
+        cv2.Rodrigues(np.radians([getattr(scenario, f"{error}_{axis}_deg") for axis in "xyz"]))[0]
+        for error in ("attitude_error", "misalignment")
+    ]
+    return np.asarray(rotation, dtype=np.float64) @ turns[0] @ turns[1]
 
 
 @dataclass(frozen=True)
@@ -173,8 +187,13 @@ class Simulator:
         radiance = renderer(pose, self.intrinsics, scenario.sun_index, scenario.seed)
         haze = scenario_transmittance(scenario, pose, self.intrinsics, self.dust_scale_height_m)
         image = camera_image(radiance, scenario, haze)
-        # The navigator's camera model: the true one, its focal length miscalibrated by the scenario's error (#38).
-        nav = navigator.locate(image, self.intrinsics.with_focal_error(scenario.focal_error), pose.rotation)
+        # The navigator's camera model: the true one, its focal length miscalibrated by the scenario's
+        # error (#38), and the attitude it believes, off by the scenario's attitude errors (#39).
+        nav = navigator.locate(
+            image,
+            self.intrinsics.with_focal_error(scenario.focal_error),
+            believed_attitude(scenario, pose.rotation),
+        )
         cost = time.perf_counter() - start
 
         estimate = error = in_map = None

@@ -29,7 +29,16 @@ import yaml
 
 from fidelis.map_frame import MATCHING_MAPS, horizontal_error_m
 from fidelis.render.mesh_render import PHOTO_TEXTURE
-from fidelis.scenario import MC_SEED_LIMIT, ScenarioConfig, clear_air, draw, exact_camera, load_config, pin_sun
+from fidelis.scenario import (
+    MC_SEED_LIMIT,
+    ScenarioConfig,
+    clear_air,
+    draw,
+    exact_camera,
+    load_config,
+    pin_sun,
+    true_attitude,
+)
 from fidelis.simulation import SimulationRecord
 from fidelis.stress import (
     REALISTIC_SUNS,
@@ -205,6 +214,11 @@ def main() -> int:
         action="store_true",
         help="no focal-length error (focal_error = 0), as every run before #38 had; for reruns of those results",
     )
+    parser.add_argument(
+        "--true-attitude",
+        action="store_true",
+        help="no attitude error (all six attitude inputs 0), as every run before #39 had; for reruns of those results",
+    )
     args = parser.parse_args()
 
     from fidelis.simulation import build_simulator
@@ -225,6 +239,8 @@ def main() -> int:
         config = clear_air(config)
     if args.exact_camera:
         config = exact_camera(config)
+    if args.true_attitude:
+        config = true_attitude(config)
     simulator = build_simulator(
         args.config,
         args.data_dir,
@@ -245,6 +261,7 @@ def main() -> int:
         "sun_index_pinned": args.sun_index,
         "clear_air": args.clear_air,
         "exact_camera": args.exact_camera,
+        "true_attitude": args.true_attitude,
         # The one sun a pinned run used, with its angle from the map's sun; None if each seed drew its own.
         "pinned_sun": pinned_sun(scene, args.sun_index, args.stress_sun),
         "stress_case": est.stress_case,

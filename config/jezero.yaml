@@ -201,6 +201,21 @@ scenario:
   # (a Fidelis choice) covers the range evenly so results can be read per range point
   # (docs/benchmarks/focal-error.md). Reruns of results from before #38 pass --exact-camera.
   focal_error: {dist: uniform, low: -0.01, high: 0.01}
+  # The navigator's attitude error (#39), degrees about the camera's own axes (x right, y down, z
+  # the optical axis); the render keeps the true attitude. Two sourced errors, composed:
+  #   attitude_error  the DIMU attitude at LVS start, "less than 0.5 deg per axis" (Johnson et al.
+  #                   2017 p.8; sigma not stated, so read as a bound)
+  #   misalignment    LCAM-to-IMU alignment, Gaussian within +-0.75 deg per axis in JPL's runs,
+  #                   costing LVS at most 3.0 m (Johnson et al. 2017 pp.11-12)
+  # Via docs/research/lvs-error-sources.md, section 1. Uniform over each bound is the written
+  # choice: the source gives no sigma, and uniform leans towards large errors rather than hiding
+  # them (docs/benchmarks/attitude-error.md). Reruns of results from before #39 pass --true-attitude.
+  attitude_error_x_deg: {dist: uniform, low: -0.5, high: 0.5}
+  attitude_error_y_deg: {dist: uniform, low: -0.5, high: 0.5}
+  attitude_error_z_deg: {dist: uniform, low: -0.5, high: 0.5}
+  misalignment_x_deg: {dist: uniform, low: -0.75, high: 0.75}
+  misalignment_y_deg: {dist: uniform, low: -0.75, high: 0.75}
+  misalignment_z_deg: {dist: uniform, low: -0.75, high: 0.75}
 
 # Dust haze (#37, src/fidelis/render/haze.py): how the column's dust (scenario.dust_tau) is
 # spread with height. The share below a camera h up is 1 - exp(-h / H).

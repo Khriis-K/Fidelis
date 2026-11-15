@@ -38,3 +38,12 @@ def test_carc_pins_the_gpu_model_for_both_since_their_costs_are_recorded():
 
     for rule in ("plain_mc", "match_viz"):
         assert jobs[rule].get("gpu_model") in CARC_GPU_TYPES, rule
+
+
+def test_the_rules_that_made_the_results_from_before_the_attitude_error_still_use_the_true_attitude():
+    # Their navigator got the true attitude (#39); a rerun with an attitude error would change what they mean.
+    output = dry_run("local", *TARGETS, "--printshellcmds")
+    commands = [line for line in output.splitlines() if "fidelis-plain-mc" in line or "fidelis-match-viz" in line]
+
+    assert len(commands) == 2
+    assert all("--true-attitude" in command for command in commands), commands

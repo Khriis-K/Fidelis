@@ -35,17 +35,21 @@ MAP_RESOLUTIONS = {
 # Not map_offset or matching_map.source: the Monte Carlo rules below are pinned to the scene's
 # own map (OLD_MAP), whose offset is zero by construction.
 # Not scenario.dust_tau or haze either: those rules run in clear air (below). Nor
-# scenario.focal_error: they run with the exact camera (below).
+# scenario.focal_error: they run with the exact camera (below). Nor the six attitude inputs:
+# they run with the true attitude (below).
 MC_CONFIG = config_values("plain_mc", "scenario", "simulation", "suns", "tile", "scene")
 MC_CONFIG["scenario"] = {
-    key: value for key, value in MC_CONFIG["scenario"].items() if key not in ("dust_tau", "focal_error")
+    key: value
+    for key, value in MC_CONFIG["scenario"].items()
+    if key not in ("dust_tau", "focal_error") and not key.startswith(("attitude_error_", "misalignment_"))
 }
 # The plain_mc* and match_viz rules made the results from before #36, on seeds 0-19, against
-# the scene's own map, in clear air (no dust haze, #37) and with the exact camera (no focal-length
-# error, #38). They stay that way: on the CTX map, with haze or with a focal error, they would
+# the scene's own map, in clear air (no dust haze, #37), with the exact camera (no focal-length
+# error, #38) and the true attitude (no attitude error, #39). They stay that way: on the CTX map,
+# or with any of those errors, they would
 # overwrite those results, and the CTX map would spend seeds its scans must not have seen. Scans
 # on the CTX map are pre-registered and run by hand (docs/benchmarks/ctx-map-scan.md).
-OLD_MAP = "--matching-map scene --clear-air --exact-camera"
+OLD_MAP = "--matching-map scene --clear-air --exact-camera --true-attitude"
 
 
 JEZERO = "data/jezero"

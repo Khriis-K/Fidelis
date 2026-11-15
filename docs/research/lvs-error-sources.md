@@ -174,8 +174,8 @@ Not a failure mode: attitude error up to 5° and exposure off by 4× both worked
 | Map elevation error | < 20 m (3σ); 4.35 m 1σ between maps | **No.** Map DEM is the render DEM | Small to medium; not separately quantified in sources |
 | Focal-length calibration | ±1% → up to 16.9 m (99%) in 2016 | **No.** Intrinsics exact | Medium: bias that can exceed 12 m off nadir; post-calibration size not found |
 | Lens distortion residual | 18% distortion, LUT-corrected; residual not found | **No.** Pinhole | Unknown |
-| Attitude knowledge at LVS start | < 0.5° per axis (bound, σ unstated); tolerated to 5° | **No.** True attitude | Low: Fidelis saw no effect to 3° |
-| LCAM–IMU misalignment | ±0.75° per axis → ≤ 3.0 m | **No** | Low |
+| Attitude knowledge at LVS start | < 0.5° per axis (bound, σ unstated); tolerated to 5° | **Yes, since #39.** Uniform over ±0.5° per axis (`docs/benchmarks/attitude-error.md`) | Low: Fidelis saw no effect to 3° |
+| LCAM–IMU misalignment | ±0.75° per axis → ≤ 3.0 m | **Yes, since #39.** Uniform over ±0.75° per axis, static only | Low: Fidelis's PnP doesn't use attitude for geometry |
 | Altitude (radar) | < 100 m; tolerated to 350 m | Not used: the navigator takes no altitude prior | None unless a prior is added |
 | Timing / sync | 15.6 ms sample → 1.79 m; camera delay sizes not found | **No** | Low |
 | Sun elevation and azimuth | 25–55°, 240–310° | **Yes**: five suns | Already in |

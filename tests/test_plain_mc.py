@@ -292,3 +292,30 @@ def test_the_cli_runs_the_config_with_exactly_the_errors_its_flags_leave_out(mon
     [config] = seen
     for name in ("dust_tau", "focal_error"):
         assert (getattr(config, name).bounds() == (0.0, 0.0)) == (name in zeroed), name
+
+
+def test_the_true_attitude_flag_reaches_the_draws_and_leaves_every_other_error_in(monkeypatch, tmp_path):
+    # Reruns of results from before #39 rely on --true-attitude reaching the draws (#39).
+    import fidelis.plain_mc as plain_mc
+    import fidelis.simulation
+    from fidelis.scenario import ATTITUDE_FIELDS
+
+    seen = []
+    monkeypatch.setattr(fidelis.simulation, "build_simulator", lambda *args, **kwargs: None)
+
+    def capture(simulator, config, seeds, fidelity):
+        seen.append(config)
+        raise StopBeforeRunning
+
+    monkeypatch.setattr(plain_mc, "run_samples", capture)
+    config_path = str(REPO / "config" / "jezero.yaml")
+    for flags in ([], ["--true-attitude"]):
+        monkeypatch.setattr("sys.argv", ["fidelis-plain-mc", config_path, "data", str(tmp_path), *flags])
+        with pytest.raises(StopBeforeRunning):
+            plain_mc.main()
+    default, true = seen
+    for name in ATTITUDE_FIELDS:
+        assert getattr(default, name).bounds() != (0.0, 0.0), name
+        assert getattr(true, name).bounds() == (0.0, 0.0), name
+    for name in ("dust_tau", "focal_error"):
+        assert getattr(true, name).bounds() != (0.0, 0.0), name
