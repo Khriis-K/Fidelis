@@ -90,4 +90,4 @@ No SuperPoint code or weights are used: LightGlue runs with its ALIKED weights.
 
 ## License
 
-TODO: pick one (MIT or Apache-2.0). Every runtime dependency is permissively licensed.
+[MIT](LICENSE). Every runtime dependency is permissively licensed. The public data keeps its own terms (see Data and credits).
